@@ -156,6 +156,28 @@ db.exec(`
     summary_json TEXT,
     generated_at INTEGER DEFAULT (strftime('%s', 'now'))
   );
+  CREATE TABLE IF NOT EXISTS office_agents (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    position_x REAL DEFAULT 0,
+    position_y REAL DEFAULT 0,
+    state TEXT DEFAULT 'offline',
+    current_task TEXT,
+    task_progress INTEGER DEFAULT 0,
+    color TEXT DEFAULT '#808080',
+    office_enabled INTEGER DEFAULT 0
+  );
+
+  CREATE TABLE IF NOT EXISTS office_reports (
+    id TEXT PRIMARY KEY,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    task_title TEXT NOT NULL,
+    completed_at INTEGER,
+    acknowledged INTEGER DEFAULT 0,
+    FOREIGN KEY (agent_id) REFERENCES office_agents(id)
+  );
+
 `);
 
 // Add missing columns if they exist (migration)
@@ -196,6 +218,21 @@ const insertLane = db.prepare(`
   VALUES (?, ?, ?, ?)
 `);
 defaultLanes.forEach(lane => insertLane.run(lane.id, lane.name, lane.color, lane.description));
+
+
+// Seed default office agents
+const officeDefaultAgents = [
+  { id: 'mildred', name: 'Mildred', position_x: 18, position_y: 4, state: 'idle', color: '#008080' },
+  { id: 'dev', name: 'Dev', position_x: 3, position_y: 4, state: 'idle', color: '#808080' },
+  { id: 'content', name: 'Content', position_x: 3, position_y: 12, state: 'idle', color: '#800080' },
+  { id: 'research', name: 'Research', position_x: 18, position_y: 12, state: 'idle', color: '#8B4513' },
+];
+
+const insertOfficeAgent = db.prepare(`
+  INSERT OR IGNORE INTO office_agents (id, name, position_x, position_y, state, color, office_enabled)
+  VALUES (?, ?, ?, ?, ?, ?, 1)
+`);
+officeDefaultAgents.forEach(agent => insertOfficeAgent.run(agent.id, agent.name, agent.position_x, agent.position_y, agent.state, agent.color));
 
 // GitHub Octokit (read-only, uses token from env)
 const octokit = process.env.GITHUB_TOKEN ? new Octokit({ auth: process.env.GITHUB_TOKEN }) : null;
@@ -703,6 +740,131 @@ app.get('/api/dashboard/stats', (_req, res) => {
 
 // Server setup
 const server = createServer(app);
+
+// ============ OFFICE API ROUTES ============
+
+// Get all office agents
+app.get('/api/office/agents', (_req, res) => {
+  const agents = db.prepare('SELECT * FROM office_agents WHERE office_enabled = 1').all();
+  res.json({ agents });
+});
+
+// Get office agent by ID
+app.get('/api/office/agents/:id', (req, res) => {
+  const agent = db.prepare('SELECT * FROM office_agents WHERE id = ?').get(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'Agent not found' });
+  res.json(agent);
+});
+
+// Update agent state
+app.post('/api/office/agents/:id/state', (req, res) => {
+  const { state, task, progress } = req.body;
+  db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
+    .run(state, task || null, progress || 0, req.params.id);
+  
+  // Broadcast to office WS
+  officeWss?.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'agent.state', agentId: req.params.id, state, task, progress }));
+    }
+  });
+  
+  res.json({ success: true });
+});
+
+// Move agent to position
+app.post('/api/office/agents/:id/move', (req, res) => {
+  const { x, y } = req.body;
+  db.prepare('UPDATE office_agents SET position_x = ?, position_y = ? WHERE id = ?')
+    .run(x, y, req.params.id);
+  
+  // Broadcast to office WS
+  officeWss?.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'agent.move', agentId: req.params.id, to: { x, y } }));
+    }
+  });
+  
+  res.json({ success: true });
+});
+
+// Get all reports
+app.get('/api/office/reports', (_req, res) => {
+  const reports = db.prepare('SELECT * FROM office_reports ORDER BY completed_at DESC').all();
+  res.json({ reports });
+});
+
+// Create a new report (when task completes)
+app.post('/api/office/report', (req, res) => {
+  const { agent_id, agent_name, task_title } = req.body;
+  const id = `report-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  
+  db.prepare(`
+    INSERT INTO office_reports (id, agent_id, agent_name, task_title, completed_at, acknowledged)
+    VALUES (?, ?, ?, ?, ?, 0)
+  `).run(id, agent_id, agent_name, task_title, Date.now());
+  
+  const report = db.prepare('SELECT * FROM office_reports WHERE id = ?').get(id);
+  
+  // Broadcast to office WS
+  officeWss?.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({ type: 'report.new', reportId: id, agentId: agent_id, agentName: agent_name, taskTitle: task_title }));
+    }
+  });
+  
+  res.status(201).json(report);
+});
+
+// Acknowledge a report
+app.post('/api/office/report/:id/acknowledge', (req, res) => {
+  db.prepare('UPDATE office_reports SET acknowledged = 1 WHERE id = ?').run(req.params.id);
+  res.json({ success: true });
+});
+
+// Office WebSocket server
+const officeWss = new WebSocketServer({ server, path: '/ws/office' });
+
+officeWss.on('connection', (ws) => {
+  console.log('Office client connected');
+  
+  // Send current state
+  const agents = db.prepare('SELECT * FROM office_agents WHERE office_enabled = 1').all();
+  ws.send(JSON.stringify({ type: 'office.init', agents }));
+  
+  ws.on('message', (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+      
+      if (msg.type === 'agent.enter') {
+        const agent = db.prepare('SELECT * FROM office_agents WHERE id = ?').get(msg.agentId);
+        if (agent) {
+          db.prepare('UPDATE office_agents SET state = ? WHERE id = ?').run('entering', msg.agentId);
+          officeWss.clients.forEach(client => {
+            if (client.readyState === WebSocket.OPEN) {
+              client.send(JSON.stringify({ type: 'agent.state', agentId: msg.agentId, state: 'entering' }));
+            }
+          });
+        }
+      }
+      
+      if (msg.type === 'agent.leave') {
+        db.prepare('UPDATE office_agents SET state = ? WHERE id = ?').run('offline', msg.agentId);
+        officeWss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({ type: 'agent.leave', agentId: msg.agentId }));
+          }
+        });
+      }
+      
+    } catch {}
+  });
+  
+  ws.on('close', () => console.log('Office client disconnected'));
+});
+
+// Gateway WebSocket setup
+
 const wss = new WebSocketServer({ server, path: '/gateway' });
 
 function broadcastUpdate(message: any) {

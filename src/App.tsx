@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { OfficePage } from './components/OfficePage';
 import { AgentCard } from './components/AgentCard';
 
 interface Agent {
@@ -127,7 +128,7 @@ function App() {
   const [connected, setConnected] = useState(false);
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [selectedLane, setSelectedLane] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'board' | 'dashboard'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'dashboard' | 'office'>('board');
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [taskCosts, setTaskCosts] = useState<TaskCost[]>([]);
   const [costTotals, setCostTotals] = useState({ tokens: 0, estimated: 0, actual: 0 });
@@ -364,6 +365,7 @@ function App() {
             <div className="flex bg-slate-700 rounded-lg p-1">
               <button onClick={() => setViewMode('board')} className={`px-3 py-1 rounded text-sm ${viewMode === 'board' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Board</button>
               <button onClick={() => setViewMode('dashboard')} className={`px-3 py-1 rounded text-sm ${viewMode === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Dashboard</button>
+              <button onClick={() => setViewMode('office')} className={`px-3 py-1 rounded text-sm ${viewMode === 'office' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>🏢 Office</button>
             </div>
             {/* Lane Selector */}
             <select value={selectedLane} onChange={e => setSelectedLane(e.target.value)} className="bg-slate-700 rounded px-3 py-1 text-sm">
@@ -549,6 +551,11 @@ function App() {
           </div>
         </section>
         </>
+        )}
+
+        {/* Office View */}
+        {viewMode === 'office' && (
+          <OfficePage />
         )}
       </main>
 
