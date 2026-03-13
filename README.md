@@ -1,5 +1,7 @@
 # Philip-Mildred Command Center
 
+[![CI](https://github.com/philipriccio/philip-mildred-command-center/actions/workflows/ci.yml/badge.svg)](https://github.com/philipriccio/philip-mildred-command-center/actions/workflows/ci.yml)
+
 A task management and agent coordination dashboard with multi-lane portfolio views, cost tracking, and deadline alerts.
 
 ## Features
@@ -42,47 +44,35 @@ A task management and agent coordination dashboard with multi-lane portfolio vie
 - **Backend**: Express + better-sqlite3 + WebSocket
 - **Real-time**: WebSocket for live updates
 
-## Getting Started
+## Quick Start
 
 ```bash
 # Install dependencies
 npm install
 
+# Copy environment config
+cp .env.example .env
+
 # Start the server (port 3001)
-npx tsx server/index.ts
+npm run server
 
 # Start the frontend (port 3000)
 npm run dev
 ```
 
-## API Endpoints
+See [SETUP.md](SETUP.md) for detailed installation instructions.
 
-### Tasks
-- GET /api/tasks - List all tasks
-- POST /api/tasks - Create task
-- PUT /api/tasks/:id - Update task
-- DELETE /api/tasks/:id - Delete task
+## Documentation
 
-### Lanes
-- GET /api/lanes - List all lanes
-- POST /api/lanes - Create lane
-- PUT /api/lanes/:id - Update lane
-- DELETE /api/lanes/:id - Delete lane
-
-### Dashboard
-- GET /api/dashboard/stats - Dashboard statistics
-- GET /api/task-costs/summary - Cost summary
-- GET /api/weekly-summaries - Weekly summaries
-- POST /api/weekly-summaries/generate - Generate weekly summary
-
-### Verification
-- POST /api/tasks/:id/evidence - Upload evidence
-- POST /api/tasks/:id/approve - Approve task
-- POST /api/tasks/:id/request-changes - Request changes
-- POST /api/tasks/:id/pr - Link PR
+- [SETUP.md](SETUP.md) - Detailed setup guide
+- [ENVIRONMENT.md](ENVIRONMENT.md) - Environment variables
+- [API.md](API.md) - API endpoint documentation
+- [ARCHITECTURE.md](ARCHITECTURE.md) - System design
+- [SECURITY.md](SECURITY.md) - Security details
 
 ## Security
 - Helmet.js for security headers
 - CORS configured for localhost
 - Input validation on all endpoints
+- Parameterized SQL queries
 - npm audit: 0 vulnerabilities
