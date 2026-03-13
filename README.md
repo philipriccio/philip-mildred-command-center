@@ -1,73 +1,88 @@
-# React + TypeScript + Vite
+# Philip-Mildred Command Center
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A task management and agent coordination dashboard with multi-lane portfolio views, cost tracking, and deadline alerts.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Multi-Lane Portfolio View
+- Four dedicated lanes: Hawco Development, Company Theatre, Self-e-Tape, Personal
+- Color-coded lanes (Blue, Amber, Green, Purple)
+- Lane selector/filter in the header
 
-## React Compiler
+### Dashboard View
+- At-a-glance stats: total tasks, completed, in progress, overdue, due soon
+- Portfolio overview with completion rates per lane
+- Cost tracking summary (tokens, estimated, actual)
+- Recent activity feed
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Deadline Alerts
+- Overdue task indicators (red badges)
+- Due-soon warnings (yellow for <48h, orange for <24h)
+- Alert banner for critical deadlines
 
-## Expanding the ESLint configuration
+### Weekly Summary
+- Auto-generated weekly reports
+- Completed, in-progress, blocked task counts
+- Cost summary for the week
+- Upcoming deadlines (next 7 days)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Kanban Board
+- Drag-and-drop task management
+- Five columns: Backlog, Ready, In Progress, Verification, Complete
+- Task assignment to agents
+- Deadline and blocker tracking
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Verification Panel (Phase 3)
+- Evidence uploads
+- GitHub PR linking with CI status
+- Approval workflow: Approve, Request Changes, Send Back
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Tech Stack
+- **Frontend**: React + TypeScript + Vite + TailwindCSS
+- **Backend**: Express + better-sqlite3 + WebSocket
+- **Real-time**: WebSocket for live updates
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Start the server (port 3001)
+npx tsx server/index.ts
+
+# Start the frontend (port 3000)
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## API Endpoints
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Tasks
+- GET /api/tasks - List all tasks
+- POST /api/tasks - Create task
+- PUT /api/tasks/:id - Update task
+- DELETE /api/tasks/:id - Delete task
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+### Lanes
+- GET /api/lanes - List all lanes
+- POST /api/lanes - Create lane
+- PUT /api/lanes/:id - Update lane
+- DELETE /api/lanes/:id - Delete lane
+
+### Dashboard
+- GET /api/dashboard/stats - Dashboard statistics
+- GET /api/task-costs/summary - Cost summary
+- GET /api/weekly-summaries - Weekly summaries
+- POST /api/weekly-summaries/generate - Generate weekly summary
+
+### Verification
+- POST /api/tasks/:id/evidence - Upload evidence
+- POST /api/tasks/:id/approve - Approve task
+- POST /api/tasks/:id/request-changes - Request changes
+- POST /api/tasks/:id/pr - Link PR
+
+## Security
+- Helmet.js for security headers
+- CORS configured for localhost
+- Input validation on all endpoints
+- npm audit: 0 vulnerabilities

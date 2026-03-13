@@ -13,10 +13,13 @@
   },
   "dependencies": {
     "@octokit/rest": "^22.0.1",
+    "@types/multer": "^2.1.0",
     "better-sqlite3": "^12.6.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
+    "multer": "^2.1.1",
+    "octokit": "^5.0.5",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "ws": "^8.19.0"
