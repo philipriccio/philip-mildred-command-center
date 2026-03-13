@@ -1,10 +1,14 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import Database from 'better-sqlite3';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -27,7 +31,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10kb' }));
 
 // SQLite database setup
 const dbPath = path.join(__dirname, 'data.db');
@@ -90,8 +94,6 @@ const server = createServer(app);
 // WebSocket connection to OpenClaw Gateway
 const wss = new WebSocketServer({ server, path: '/gateway' });
 
-let gatewayWs: WebSocket | null = null;
-
 wss.on('connection', (ws) => {
   console.log('Client connected to command center');
   
@@ -110,22 +112,23 @@ wss.on('connection', (ws) => {
 });
 
 // Connect to OpenClaw Gateway
+let gatewayWs: WebSocket | null = null;
+
 function connectToGateway() {
   const gatewayUrl = 'ws://localhost:18789';
   
   try {
-    const gateway = new WebSocket(gatewayUrl);
+    gatewayWs = new WebSocket(gatewayUrl);
     
-    gateway.on('open', () => {
+    gatewayWs.on('open', () => {
       console.log('Connected to OpenClaw Gateway');
-      gatewayWs = gateway;
       db.prepare('UPDATE status SET gateway_connected = 1, last_update = ? WHERE id = 1').run(Date.now());
       
       // Send handshake
-      gateway.send(JSON.stringify({ type: 'register', client: 'command-center' }));
+      gatewayWs?.send(JSON.stringify({ type: 'register', client: 'command-center' }));
     });
 
-    gateway.on('message', (data) => {
+    gatewayWs.on('message', (data) => {
       try {
         const message = JSON.parse(data.toString());
         handleGatewayMessage(message);
@@ -134,7 +137,7 @@ function connectToGateway() {
       }
     });
 
-    gateway.on('close', () => {
+    gatewayWs.on('close', () => {
       console.log('Disconnected from Gateway');
       gatewayWs = null;
       db.prepare('UPDATE status SET gateway_connected = 0, last_update = ? WHERE id = 1').run(Date.now());
@@ -142,7 +145,7 @@ function connectToGateway() {
       setTimeout(connectToGateway, 5000);
     });
 
-    gateway.on('error', (err) => {
+    gatewayWs.on('error', (err) => {
       console.error('Gateway connection error:', err.message);
     });
   } catch (err) {
@@ -151,27 +154,30 @@ function connectToGateway() {
   }
 }
 
-function handleGatewayMessage(message: any) {
+function handleGatewayMessage(message: unknown) {
   // Handle agent status updates from gateway
-  if (message.type === 'agent_status' || message.type === 'agent_update') {
-    const agent = message.data;
-    if (agent && agent.id) {
-      const stmt = db.prepare(`
-        INSERT INTO agents (id, name, status, last_seen, metadata)
-        VALUES (?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          name = excluded.name,
-          status = excluded.status,
-          last_seen = excluded.last_seen,
-          metadata = excluded.metadata
-      `);
-      stmt.run(agent.id, agent.name || agent.id, agent.status || 'unknown', Date.now(), JSON.stringify(agent.metadata || {}));
+  if (typeof message === 'object' && message !== null) {
+    const msg = message as { type?: string; data?: { id?: string; name?: string; status?: string; metadata?: Record<string, unknown> } };
+    if (msg.type === 'agent_status' || msg.type === 'agent_update') {
+      const agent = msg.data;
+      if (agent && agent.id) {
+        const stmt = db.prepare(`
+          INSERT INTO agents (id, name, status, last_seen, metadata)
+          VALUES (?, ?, ?, ?, ?)
+          ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            status = excluded.status,
+            last_seen = excluded.last_seen,
+            metadata = excluded.metadata
+        `);
+        stmt.run(agent.id, agent.name || agent.id, agent.status || 'unknown', Date.now(), JSON.stringify(agent.metadata || {}));
+      }
     }
   }
   
   // Broadcast to all connected clients
   wss.clients.forEach((client) => {
-    if (client.readyState === 1) {
+    if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify(message));
     }
   });
