@@ -56,7 +56,7 @@ cp .env.example .env
 # Start the server (port 3001)
 npm run server
 
-# Start the frontend (port 3000)
+# Start the frontend (Vite defaults to port 5173)
 npm run dev
 ```
 

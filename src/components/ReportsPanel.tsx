@@ -1,105 +1,63 @@
-
-interface Report {
+interface OfficeReport {
   id: string;
-  agentId: string;
-  agentName: string;
-  taskTitle: string;
-  completedAt: number;
-  acknowledged: boolean;
+  agent_id: string;
+  agent_name: string;
+  task_title: string;
+  completed_at: number;
+  acknowledged: number;
 }
 
-interface ReportsPanelProps {
-  reports: Report[];
-  onAcknowledge: (reportId: string) => void;
-  isOpen: boolean;
-  onClose: () => void;
-}
-
-export function ReportsPanel({ reports, onAcknowledge, isOpen, onClose }: ReportsPanelProps) {
-  const unacknowledged = reports.filter(r => !r.acknowledged);
-  const acknowledged = reports.filter(r => r.acknowledged);
-
+export function ReportsPanel({ reports, onAcknowledge, isOpen, onClose }: { reports: OfficeReport[]; onAcknowledge: (reportId: string) => void; isOpen: boolean; onClose: () => void }) {
   if (!isOpen) return null;
 
+  const unread = reports.filter((report) => !report.acknowledged);
+  const read = reports.filter((report) => report.acknowledged);
+
   return (
-    <div className="fixed inset-y-0 right-0 w-96 bg-slate-800 border-l border-slate-700 shadow-xl z-50 transform transition-transform">
-      <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-        <h2 className="text-lg font-bold">📥 Reports Inbox</h2>
-        <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl">&times;</button>
-      </div>
-
-      <div className="p-4 overflow-y-auto h-full pb-20">
-        {/* Unacknowledged Reports */}
-        {unacknowledged.length > 0 && (
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-red-400 mb-3">
-              🔴 Unread ({unacknowledged.length})
-            </h3>
-            <div className="space-y-3">
-              {unacknowledged.map(report => (
-                <div key={report.id} className="bg-slate-700 rounded-lg p-3 border-l-4 border-red-500">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium" style={{ 
-                      color: report.agentName === 'mildred' ? '#008080' : 
-                             report.agentName === 'dev' ? '#808080' :
-                             report.agentName === 'content' ? '#800080' : '#8B4513'
-                    }}>
-                      {report.agentName}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(report.completedAt).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <p className="text-sm text-white mb-2">{report.taskTitle}</p>
-                  <button 
-                    onClick={() => onAcknowledge(report.id)}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white text-xs py-1 rounded"
-                  >
-                    ✓ Acknowledge
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Acknowledged Reports */}
-        {acknowledged.length > 0 && (
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm">
+      <aside className="ml-auto flex h-full w-full max-w-md flex-col border-l border-slate-800 bg-slate-950 shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>
-            <h3 className="text-sm font-semibold text-slate-400 mb-3">
-              ✓ Read ({acknowledged.length})
-            </h3>
-            <div className="space-y-2">
-              {acknowledged.slice(0, 10).map(report => (
-                <div key={report.id} className="bg-slate-700/50 rounded-lg p-2 opacity-60">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs" style={{ 
-                      color: report.agentName === 'mildred' ? '#008080' : 
-                             report.agentName === 'dev' ? '#808080' :
-                             report.agentName === 'content' ? '#800080' : '#8B4513'
-                    }}>
-                      {report.agentName}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {new Date(report.completedAt).toLocaleDateString()}
-                    </span>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Office visibility</p>
+            <h2 className="text-lg font-semibold text-slate-100">Reports inbox</h2>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-slate-800 px-3 py-2 text-slate-400 hover:text-white">Close</button>
+        </div>
+        <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+          <section>
+            <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-rose-300">Unread</h3>
+            <div className="space-y-3">
+              {unread.length === 0 && <p className="text-sm text-slate-500">No unread reports.</p>}
+              {unread.map((report) => (
+                <div key={report.id} className="rounded-2xl border border-rose-500/30 bg-rose-500/10 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-slate-100">{report.task_title}</p>
+                    <span className="text-xs text-slate-400">{new Date(report.completed_at).toLocaleTimeString()}</span>
                   </div>
-                  <p className="text-xs text-slate-300">{report.taskTitle}</p>
+                  <p className="mt-1 text-sm text-slate-300">{report.agent_name}</p>
+                  <button onClick={() => onAcknowledge(report.id)} className="mt-3 rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white hover:bg-emerald-500">Acknowledge</button>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          </section>
 
-        {reports.length === 0 && (
-          <div className="text-center text-slate-400 py-8">
-            <p>No reports yet</p>
-            <p className="text-sm">Completed tasks will appear here</p>
-          </div>
-        )}
-      </div>
+          <section>
+            <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-slate-400">Read</h3>
+            <div className="space-y-3">
+              {read.length === 0 && <p className="text-sm text-slate-500">No acknowledged reports yet.</p>}
+              {read.map((report) => (
+                <div key={report.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-medium text-slate-100">{report.task_title}</p>
+                    <span className="text-xs text-slate-500">{new Date(report.completed_at).toLocaleDateString()}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">{report.agent_name}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+      </aside>
     </div>
   );
 }
-
-export default ReportsPanel;

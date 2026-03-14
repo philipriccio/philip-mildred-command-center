@@ -147,7 +147,7 @@ The backend connects to the OpenClaw Gateway to:
 ### Development
 ```bash
 npm run server   # Backend (port 3001)
-npm run dev      # Frontend (port 3000)
+npm run dev      # Frontend (port 5173 by default)
 ```
 
 ### Production
@@ -168,4 +168,6 @@ npm run build    # Creates dist/
 - Database backup: Copy `server/data.db` periodically
 - Evidence backup: Contents of `uploads/` directory
 - Recommended: Daily automated backups
+- Store backups in separate location from app
+utomated backups
 - Store backups in separate location from app

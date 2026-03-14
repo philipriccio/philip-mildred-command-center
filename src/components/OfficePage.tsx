@@ -2,141 +2,90 @@ import { useEffect, useState } from 'react';
 import { OfficeCanvas } from './OfficeCanvas';
 import { ReportsPanel } from './ReportsPanel';
 
-interface Agent {
+interface OfficeAgent {
   id: string;
   name: string;
-  position: { x: number; y: number };
+  position_x: number;
+  position_y: number;
   state: string;
-  currentTask?: string;
+  current_task: string | null;
+  task_progress: number;
+  color: string;
+  office_enabled: number;
 }
 
-interface Report {
+interface OfficeReport {
   id: string;
-  agentId: string;
-  agentName: string;
-  taskTitle: string;
-  completedAt: number;
-  acknowledged: boolean;
+  agent_id: string;
+  agent_name: string;
+  task_title: string;
+  completed_at: number;
+  acknowledged: number;
 }
 
-export function OfficePage() {
-  const [ws, setWs] = useState<WebSocket | null>(null);
+export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string }) {
+  const [reports, setReports] = useState<OfficeReport[]>([]);
+  const [agents, setAgents] = useState<OfficeAgent[]>([]);
   const [connected, setConnected] = useState(false);
-  const [reports, setReports] = useState<Report[]>([]);
   const [showReports, setShowReports] = useState(false);
 
-  // Initialize WebSocket
   useEffect(() => {
-    const websocket = new WebSocket('ws://localhost:3001/ws/office');
-    
-    websocket.onopen = () => {
-      console.log('Office WS connected');
-      setConnected(true);
-    };
-    
-    websocket.onmessage = (event) => {
+    fetch(`${apiBase}/api/office/agents`).then((res) => res.json()).then((data) => setAgents(data.agents || [])).catch(console.error);
+    fetch(`${apiBase}/api/office/reports`).then((res) => res.json()).then((data) => setReports(data.reports || [])).catch(console.error);
+
+    const ws = new WebSocket(wsUrl);
+    ws.onopen = () => setConnected(true);
+    ws.onclose = () => setConnected(false);
+    ws.onmessage = (event) => {
       try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'report.new') {
-          setReports(prev => [...prev, {
-            id: msg.reportId,
-            agentId: msg.agentId,
-            agentName: msg.agentName,
-            taskTitle: msg.taskTitle,
-            completedAt: Date.now(),
-            acknowledged: false,
-          }]);
+        const message = JSON.parse(event.data) as { type?: string; agents?: OfficeAgent[]; reportId?: string; agentId?: string; agentName?: string; taskTitle?: string; state?: string; task?: string; progress?: number; to?: { x: number; y: number } };
+        if (message.type === 'office.init' && message.agents) {
+          setAgents(message.agents);
         }
-      } catch (err) {
-        console.error('Office WS error:', err);
+        if (message.type === 'agent.state' && message.agentId) {
+          setAgents((prev) => prev.map((agent) => agent.id === message.agentId ? { ...agent, state: message.state || agent.state, current_task: message.task || agent.current_task, task_progress: message.progress ?? agent.task_progress } : agent));
+        }
+        if (message.type === 'agent.move' && message.agentId && message.to) {
+          setAgents((prev) => prev.map((agent) => agent.id === message.agentId ? { ...agent, position_x: message.to!.x, position_y: message.to!.y } : agent));
+        }
+        if (message.type === 'report.new' && message.reportId && message.agentId && message.agentName && message.taskTitle) {
+          setReports((prev) => [{ id: message.reportId!, agent_id: message.agentId!, agent_name: message.agentName!, task_title: message.taskTitle!, completed_at: Date.now(), acknowledged: 0 }, ...prev]);
+        }
+      } catch (error) {
+        console.error('Office websocket error', error);
       }
     };
-    
-    websocket.onclose = () => {
-      console.log('Office WS disconnected');
-      setConnected(false);
-    };
 
-    setWs(websocket);
+    return () => ws.close();
+  }, [apiBase, wsUrl]);
 
-    // Load initial reports
-    fetch('http://localhost:3001/api/office/reports')
-      .then(res => res.json())
-      .then(data => setReports(data.reports || []))
-      .catch(console.error);
-
-    return () => websocket.close();
-  }, []);
-
-  const handleAgentClick = (agent: Agent) => {
-    console.log('Clicked agent:', agent);
+  const acknowledgeReport = async (reportId: string) => {
+    await fetch(`${apiBase}/api/office/report/${reportId}/acknowledge`, { method: 'POST' });
+    setReports((prev) => prev.map((report) => report.id === reportId ? { ...report, acknowledged: 1 } : report));
   };
 
-  const handleAcknowledgeReport = async (reportId: string) => {
-    try {
-      await fetch(`http://localhost:3001/api/office/report/${reportId}/acknowledge`, {
-        method: 'POST',
-      });
-      setReports(prev => prev.map(r => 
-        r.id === reportId ? { ...r, acknowledged: true } : r
-      ));
-    } catch (err) {
-      console.error('Failed to acknowledge report:', err);
-    }
-  };
-
-  const unackCount = reports.filter(r => !r.acknowledged).length;
+  const unreadCount = reports.filter((report) => !report.acknowledged).length;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">🏢 Office</h1>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-sm text-slate-400">
-                {connected ? 'Connected' : 'Disconnected'}
-              </span>
-            </div>
-            <button
-              onClick={() => setShowReports(!showReports)}
-              className="relative px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
-            >
-              📥 Reports
-              {unackCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                  {unackCount}
-                </span>
-              )}
-            </button>
+    <div className="space-y-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-800 bg-slate-900/80 px-5 py-4">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Visibility-only office view</p>
+          <h2 className="text-xl font-semibold text-slate-100">Office</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-300">
+            {connected ? 'Office realtime connected' : 'Office realtime disconnected'}
           </div>
+          <button onClick={() => setShowReports((prev) => !prev)} className="rounded-xl bg-slate-800 px-4 py-2 text-sm text-slate-100 hover:bg-slate-700">
+            Reports {unreadCount > 0 ? `(${unreadCount})` : ''}
+          </button>
         </div>
-      </header>
-
-      {/* Main Office View */}
-      <main className="p-6">
-        <div className="flex justify-center">
-          <OfficeCanvas ws={ws} onAgentClick={handleAgentClick} />
-        </div>
-        
-        {/* Instructions */}
-        <div className="mt-6 text-center text-slate-400 text-sm">
-          <p>Click on an agent to see their current task • Agents walk to their desks when assigned work</p>
-          <p>Completed tasks appear in the Reports inbox</p>
-        </div>
-      </main>
-
-      {/* Reports Panel */}
-      <ReportsPanel
-        reports={reports}
-        onAcknowledge={handleAcknowledgeReport}
-        isOpen={showReports}
-        onClose={() => setShowReports(false)}
-      />
+      </div>
+      <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+        <OfficeCanvas agents={agents} />
+      </div>
+      <ReportsPanel reports={reports} isOpen={showReports} onClose={() => setShowReports(false)} onAcknowledge={acknowledgeReport} />
     </div>
   );
 }
-
-export default OfficePage;

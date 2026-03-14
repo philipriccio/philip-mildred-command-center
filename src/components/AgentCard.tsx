@@ -3,7 +3,7 @@ interface Agent {
   name: string;
   status: string;
   last_seen: number | null;
-  metadata: string;
+  metadata: string | null;
 }
 
 interface AgentCardProps {

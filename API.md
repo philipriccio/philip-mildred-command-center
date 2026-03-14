@@ -55,6 +55,10 @@ List all tasks.
     "blocker_reason": null,
     "promise_date": null,
     "delivery_notes": null,
+    "request_summary": "Telegram request summary",
+    "completion_summary": null,
+    "source": "telegram",
+    "requester": "Philip",
     "lane_id": "hawco",
     "created_at": 1700000000000,
     "updated_at": 1700000000000

@@ -1,29 +1,57 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { OfficePage } from './components/OfficePage';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentCard } from './components/AgentCard';
+import { OfficePage } from './components/OfficePage';
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001';
+const WS_BASE = API_BASE.replace(/^http/, 'ws');
+const STATUSES = [
+  { id: 'backlog', label: 'Backlog', tone: 'bg-slate-700 text-slate-100 border-slate-600' },
+  { id: 'ready', label: 'Ready', tone: 'bg-blue-500/15 text-blue-200 border-blue-400/40' },
+  { id: 'in_progress', label: 'In Progress', tone: 'bg-amber-500/15 text-amber-200 border-amber-400/40' },
+  { id: 'verification', label: 'Verification', tone: 'bg-purple-500/15 text-purple-200 border-purple-400/40' },
+  { id: 'complete', label: 'Complete', tone: 'bg-green-500/15 text-green-200 border-green-400/40' },
+] as const;
+
+type StatusId = (typeof STATUSES)[number]['id'];
+
+type ViewMode = 'dashboard' | 'board' | 'office';
 
 interface Agent {
   id: string;
   name: string;
   status: string;
   last_seen: number | null;
-  metadata: string;
+  metadata: string | null;
   current_task_id: string | null;
+}
+
+interface Lane {
+  id: string;
+  name: string;
+  color: string;
+  description: string;
 }
 
 interface Task {
   id: string;
   title: string;
   description: string;
-  status: string;
+  status: StatusId;
   agent_id: string | null;
   lane_id: string | null;
   deadline: number | null;
   blocker_reason: string | null;
   created_at: number;
   updated_at: number;
-  promise_date?: string;
-  delivery_notes?: string;
+  promise_date: string | null;
+  delivery_notes: string | null;
+  request_summary: string | null;
+  completion_summary: string | null;
+  source: string | null;
+  requester: string | null;
+  agent_name?: string | null;
+  lane_name?: string | null;
+  lane_color?: string | null;
 }
 
 interface Evidence {
@@ -55,770 +83,1038 @@ interface PRTracking {
   last_checked: number;
 }
 
-interface Status {
+interface TaskHistoryEvent {
+  id: string;
+  task_id: string;
+  event_type: string;
+  actor: string;
+  summary: string;
+  created_at: number;
+  details?: Record<string, unknown> | null;
+}
+
+interface TaskDetail extends Task {
+  agent: Agent | null;
+  lane: Lane | null;
+  evidence: Evidence[];
+  approvals: Approval[];
+  prs: PRTracking[];
+  history: TaskHistoryEvent[];
+}
+
+interface StatusResponse {
   gateway_connected: number;
   last_update: number;
 }
 
-interface Lane {
-  id: string;
-  name: string;
-  color: string;
-  description: string;
-}
-
-interface TaskCost {
-  id: string;
-  task_id: string;
-  tokens_used: number;
-  estimated_cost: number;
-  actual_cost: number;
-  recorded_at: number;
-  task_title?: string;
-  lane_id?: string;
-  lane_name?: string;
-  lane_color?: string;
-}
-
 interface DashboardStats {
   totalTasks: number;
-  byStatus: {
-    backlog: number;
-    ready: number;
-    in_progress: number;
-    verification: number;
-    complete: number;
-  };
+  byStatus: Record<StatusId, number>;
   overdue: number;
   dueSoon: number;
   dueVerySoon: number;
   blocked: number;
   activeAgents: number;
-  laneStats: {
+  laneStats: Array<{
     id: string;
     name: string;
     color: string;
     total: number;
     completed: number;
     completionRate: number;
-  }[];
+  }>;
   recentActivity: Task[];
+  recentCompletions: Task[];
+  activeWork: Task[];
 }
 
-interface WeeklySummary {
-  id: string;
-  week_start: number;
-  week_end: number;
-  summary_json: string;
-  generated_at: number;
+interface TaskCostSummary {
+  totals: {
+    tokens: number;
+    estimated: number;
+    actual: number;
+  };
 }
 
-const COLUMNS = [
-  { id: 'backlog', label: 'Backlog', color: 'bg-slate-700' },
-  { id: 'ready', label: 'Ready', color: 'bg-blue-700' },
-  { id: 'in_progress', label: 'In Progress', color: 'bg-amber-700' },
-  { id: 'verification', label: 'Verification', color: 'bg-purple-700' },
-  { id: 'complete', label: 'Complete', color: 'bg-green-700' },
-];
+interface TaskDraft {
+  title: string;
+  description: string;
+  request_summary: string;
+  status: StatusId;
+  agent_id: string;
+  lane_id: string;
+  deadline: string;
+  promise_date: string;
+  blocker_reason: string;
+  completion_summary: string;
+  delivery_notes: string;
+  source: string;
+  requester: string;
+}
+
+const EMPTY_DRAFT: TaskDraft = {
+  title: '',
+  description: '',
+  request_summary: '',
+  status: 'backlog',
+  agent_id: '',
+  lane_id: '',
+  deadline: '',
+  promise_date: '',
+  blocker_reason: '',
+  completion_summary: '',
+  delivery_notes: '',
+  source: 'telegram',
+  requester: 'Philip',
+};
+
+function statusMeta(status: StatusId) {
+  return STATUSES.find((item) => item.id === status) ?? STATUSES[0];
+}
+
+function formatDateTime(value?: number | null) {
+  if (!value) return '—';
+  return new Date(value).toLocaleString();
+}
+
+function formatShortDate(value?: number | null) {
+  if (!value) return 'No deadline';
+  return new Date(value).toLocaleDateString();
+}
 
 function App() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [status, setStatus] = useState<Status>({ gateway_connected: 0, last_update: 0 });
-  const [connected, setConnected] = useState(false);
   const [lanes, setLanes] = useState<Lane[]>([]);
-  const [selectedLane, setSelectedLane] = useState<string>('all');
-  const [viewMode, setViewMode] = useState<'board' | 'dashboard' | 'office'>('board');
+  const [status, setStatus] = useState<StatusResponse>({ gateway_connected: 0, last_update: 0 });
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
-  const [taskCosts, setTaskCosts] = useState<TaskCost[]>([]);
-  const [costTotals, setCostTotals] = useState({ tokens: 0, estimated: 0, actual: 0 });
-  const [weeklySummaries, setWeeklySummaries] = useState<WeeklySummary[]>([]);
-  
-  // Used in template
-  void taskCosts;
-  void weeklySummaries;
-  const [showWeeklySummary, setShowWeeklySummary] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [draggedTask, setDraggedTask] = useState<Task | null>(null);
-  const [verificationTask, setVerificationTask] = useState<Task | null>(null);
-  const [evidence, setEvidence] = useState<Evidence[]>([]);
-  const [approvals, setApprovals] = useState<Approval[]>([]);
-  const [prs, setPrs] = useState<PRTracking[]>([]);
+  const [costSummary, setCostSummary] = useState<TaskCostSummary>({ totals: { tokens: 0, estimated: 0, actual: 0 } });
+  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [selectedLane, setSelectedLane] = useState('all');
+  const [connected, setConnected] = useState(false);
+  const [showComposer, setShowComposer] = useState(false);
+  const [editingTask, setEditingTask] = useState<TaskDetail | null>(null);
+  const [detailTask, setDetailTask] = useState<TaskDetail | null>(null);
+  const [verificationTaskId, setVerificationTaskId] = useState<string | null>(null);
+  const [taskDraft, setTaskDraft] = useState<TaskDraft>(EMPTY_DRAFT);
   const [approvalNotes, setApprovalNotes] = useState('');
   const [prUrl, setPrUrl] = useState('');
   const [prOwner, setPrOwner] = useState('');
   const [prRepo, setPrRepo] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchData = useCallback(() => {
-    fetch('http://localhost:3001/api/agents').then(res => res.json()).then(setAgents).catch(console.error);
-    fetch('http://localhost:3001/api/tasks').then(res => res.json()).then(setTasks).catch(console.error);
-    fetch('http://localhost:3001/api/status').then(res => res.json()).then(setStatus).catch(console.error);
-    fetch('http://localhost:3001/api/lanes').then(res => res.json()).then(setLanes).catch(console.error);
-    fetch('http://localhost:3001/api/dashboard/stats').then(res => res.json()).then(setDashboardStats).catch(console.error);
-    fetch('http://localhost:3001/api/task-costs/summary').then(res => res.json()).then(d => {
-      setTaskCosts(d.costs || []);
-      setCostTotals(d.totals || { tokens: 0, estimated: 0, actual: 0 });
-    }).catch(console.error);
-    fetch('http://localhost:3001/api/weekly-summaries').then(res => res.json()).then(setWeeklySummaries).catch(console.error);
+  const loadTaskDetail = useCallback(async (taskId: string) => {
+    const response = await fetch(`${API_BASE}/api/tasks/${taskId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to load task ${taskId}`);
+    }
+    return response.json() as Promise<TaskDetail>;
   }, []);
 
-  const fetchVerificationData = useCallback((taskId: string) => {
-    Promise.all([
-      fetch(`http://localhost:3001/api/tasks/${taskId}/evidence`).then(r => r.json()),
-      fetch(`http://localhost:3001/api/tasks/${taskId}/approvals`).then(r => r.json()),
-      fetch(`http://localhost:3001/api/tasks/${taskId}/pr`).then(r => r.json()),
-      fetch(`http://localhost:3001/api/tasks/${taskId}`).then(r => r.json()),
-    ]).then(([ev, ap, pr, task]) => {
-      setEvidence(ev);
-      setApprovals(ap);
-      setPrs(pr);
-      if (task) setVerificationTask(task);
-    }).catch(console.error);
+  const fetchAll = useCallback(async () => {
+    const [agentsRes, tasksRes, statusRes, lanesRes, dashboardRes, costRes] = await Promise.all([
+      fetch(`${API_BASE}/api/agents`),
+      fetch(`${API_BASE}/api/tasks`),
+      fetch(`${API_BASE}/api/status`),
+      fetch(`${API_BASE}/api/lanes`),
+      fetch(`${API_BASE}/api/dashboard/stats`),
+      fetch(`${API_BASE}/api/task-costs/summary`),
+    ]);
+
+    setAgents(await agentsRes.json());
+    setTasks(await tasksRes.json());
+    setStatus(await statusRes.json());
+    setLanes(await lanesRes.json());
+    setDashboardStats(await dashboardRes.json());
+    setCostSummary(await costRes.json());
   }, []);
 
   useEffect(() => {
-    fetchData();
-    const ws = new WebSocket('ws://localhost:3001/gateway');
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchAll().catch(console.error);
+  }, [fetchAll]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNowMs(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const ws = new WebSocket(`${WS_BASE}/gateway`);
     ws.onopen = () => setConnected(true);
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        if (message.type?.startsWith('task_') || message.type === 'agent_status' || message.type === 'agent_update' || message.type === 'evidence_' || message.type === 'pr_' || message.type === 'task_approved' || message.type === 'changes_requested' || message.type === 'task_sent_back') {
-          fetchData();
-          if (verificationTask) fetchVerificationData(verificationTask.id);
-        }
-      } catch (err) { console.error('WS message error:', err); }
-    };
     ws.onclose = () => setConnected(false);
-    const interval = setInterval(fetchData, 5000);
-    return () => { ws.close(); clearInterval(interval); };
-  }, [fetchData, fetchVerificationData, verificationTask]);
+    ws.onmessage = () => {
+      fetchAll().catch(console.error);
+      if (detailTask?.id) {
+        loadTaskDetail(detailTask.id).then(setDetailTask).catch(console.error);
+      }
+      if (editingTask?.id) {
+        loadTaskDetail(editingTask.id).then(setEditingTask).catch(console.error);
+      }
+    };
+    return () => ws.close();
+  }, [detailTask?.id, editingTask?.id, fetchAll, loadTaskDetail]);
 
-  const handleDragStart = (task: Task) => setDraggedTask(task);
-  const handleDragOver = (e: React.DragEvent) => e.preventDefault();
+  const filteredTasks = useMemo(() => {
+    return selectedLane === 'all' ? tasks : tasks.filter((task) => task.lane_id === selectedLane);
+  }, [selectedLane, tasks]);
 
-  const handleDrop = async (columnId: string) => {
-    if (!draggedTask) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${draggedTask.id}/move`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: columnId }),
-      });
-      fetchData();
-    } catch (err) { console.error('Failed to move task:', err); }
-    setDraggedTask(null);
+  const overdueTasks = filteredTasks.filter((task) => task.deadline && task.deadline < nowMs && task.status !== 'complete');
+  const activeTasks = filteredTasks.filter((task) => ['ready', 'in_progress', 'verification'].includes(task.status));
+  const blockedTasks = filteredTasks.filter((task) => Boolean(task.blocker_reason) && task.status !== 'complete');
+  const completedTasks = filteredTasks.filter((task) => task.status === 'complete').slice(0, 8);
+
+  const tasksByStatus = useMemo(() => {
+    return STATUSES.reduce<Record<StatusId, Task[]>>((acc, statusItem) => {
+      acc[statusItem.id] = filteredTasks.filter((task) => task.status === statusItem.id);
+      return acc;
+    }, { backlog: [], ready: [], in_progress: [], verification: [], complete: [] });
+  }, [filteredTasks]);
+
+  const resetComposer = useCallback(() => {
+    setTaskDraft(EMPTY_DRAFT);
+    setEditingTask(null);
+    setShowComposer(false);
+  }, []);
+
+  const openCreateTask = () => {
+    setTaskDraft(EMPTY_DRAFT);
+    setEditingTask(null);
+    setShowComposer(true);
   };
 
-  const handleCreateTask = async (taskData: Partial<Task>) => {
-    try {
-      await fetch('http://localhost:3001/api/tasks', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(taskData),
-      });
-      setShowModal(false);
-      fetchData();
-    } catch (err) { console.error('Failed to create task:', err); }
+  const openEditTask = async (taskId: string) => {
+    const detail = await loadTaskDetail(taskId);
+    setEditingTask(detail);
+    setTaskDraft({
+      title: detail.title,
+      description: detail.description || '',
+      request_summary: detail.request_summary || '',
+      status: detail.status,
+      agent_id: detail.agent_id || '',
+      lane_id: detail.lane_id || '',
+      deadline: detail.deadline ? new Date(detail.deadline).toISOString().slice(0, 10) : '',
+      promise_date: detail.promise_date || '',
+      blocker_reason: detail.blocker_reason || '',
+      completion_summary: detail.completion_summary || '',
+      delivery_notes: detail.delivery_notes || '',
+      source: detail.source || 'telegram',
+      requester: detail.requester || 'Philip',
+    });
+    setShowComposer(true);
   };
 
-  const handleUpdateTask = async (taskData: Partial<Task>) => {
-    if (!editingTask) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${editingTask.id}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(taskData),
-      });
-      setEditingTask(null);
-      fetchData();
-    } catch (err) { console.error('Failed to update task:', err); }
+  const openTaskDetail = async (taskId: string) => {
+    const detail = await loadTaskDetail(taskId);
+    setDetailTask(detail);
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    try { await fetch(`http://localhost:3001/api/tasks/${taskId}`, { method: 'DELETE' }); fetchData(); }
-    catch (err) { console.error('Failed to delete task:', err); }
+  const openVerification = async (taskId: string) => {
+    setVerificationTaskId(taskId);
+    const detail = await loadTaskDetail(taskId);
+    setDetailTask(detail);
   };
 
-  // Phase 3: Verification Panel
-  const openVerification = (task: Task) => {
-    fetchVerificationData(task.id);
-  };
-
-  const closeVerification = () => {
-    setVerificationTask(null);
-    setEvidence([]);
-    setApprovals([]);
-    setPrs([]);
+  const closeDetail = () => {
+    setDetailTask(null);
+    setVerificationTaskId(null);
     setApprovalNotes('');
     setPrUrl('');
+    setPrOwner('');
+    setPrRepo('');
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!verificationTask || !e.target.files?.length) return;
-    const file = e.target.files[0];
+  const submitTask = async () => {
+    const payload = {
+      ...taskDraft,
+      agent_id: taskDraft.agent_id || null,
+      lane_id: taskDraft.lane_id || null,
+      deadline: taskDraft.deadline ? new Date(taskDraft.deadline).getTime() : null,
+      blocker_reason: taskDraft.blocker_reason || null,
+      promise_date: taskDraft.promise_date || null,
+      completion_summary: taskDraft.completion_summary || null,
+      delivery_notes: taskDraft.delivery_notes || null,
+      request_summary: taskDraft.request_summary || taskDraft.title,
+    };
+    const url = editingTask ? `${API_BASE}/api/tasks/${editingTask.id}` : `${API_BASE}/api/tasks`;
+    const method = editingTask ? 'PUT' : 'POST';
+    await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    await fetchAll();
+    resetComposer();
+  };
+
+  const updateTaskStatus = async (taskId: string, nextStatus: StatusId) => {
+    await fetch(`${API_BASE}/api/tasks/${taskId}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: nextStatus }),
+    });
+    await fetchAll();
+    if (detailTask?.id === taskId) {
+      setDetailTask(await loadTaskDetail(taskId));
+    }
+  };
+
+  const assignTask = async (taskId: string, agentId: string) => {
+    await fetch(`${API_BASE}/api/tasks/${taskId}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agent_id: agentId || null }),
+    });
+    await fetchAll();
+    if (detailTask?.id === taskId) {
+      setDetailTask(await loadTaskDetail(taskId));
+    }
+  };
+
+  const deleteTask = async (taskId: string) => {
+    await fetch(`${API_BASE}/api/tasks/${taskId}`, { method: 'DELETE' });
+    await fetchAll();
+    if (detailTask?.id === taskId) closeDetail();
+    if (editingTask?.id === taskId) resetComposer();
+  };
+
+  const currentDetail = detailTask;
+  const isVerificationOpen = Boolean(currentDetail && verificationTaskId === currentDetail.id);
+
+  const runVerificationAction = async (action: 'approve' | 'request-changes' | 'send-back') => {
+    if (!currentDetail) return;
+    await fetch(`${API_BASE}/api/tasks/${currentDetail.id}/${action}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: approvalNotes }),
+    });
+    setApprovalNotes('');
+    await fetchAll();
+    setDetailTask(await loadTaskDetail(currentDetail.id));
+  };
+
+  const uploadEvidence = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!currentDetail || !event.target.files?.[0]) return;
     const formData = new FormData();
-    formData.append('file', file);
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${verificationTask.id}/evidence`, { method: 'POST', body: formData });
-      fetchVerificationData(verificationTask.id);
-    } catch (err) { console.error('Upload failed:', err); }
+    formData.append('file', event.target.files[0]);
+    await fetch(`${API_BASE}/api/tasks/${currentDetail.id}/evidence`, { method: 'POST', body: formData });
     if (fileInputRef.current) fileInputRef.current.value = '';
+    await fetchAll();
+    setDetailTask(await loadTaskDetail(currentDetail.id));
   };
 
-  const handleDeleteEvidence = async (id: string) => {
-    try { await fetch(`http://localhost:3001/api/evidence/${id}`, { method: 'DELETE' }); fetchVerificationData(verificationTask!.id); }
-    catch (err) { console.error('Delete failed:', err); }
+  const deleteEvidence = async (evidenceId: string) => {
+    if (!currentDetail) return;
+    await fetch(`${API_BASE}/api/evidence/${evidenceId}`, { method: 'DELETE' });
+    setDetailTask(await loadTaskDetail(currentDetail.id));
   };
 
-  const handleApprove = async () => {
-    if (!verificationTask) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${verificationTask.id}/approve`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: approvalNotes }),
-      });
-      setApprovalNotes('');
-      fetchData();
-      fetchVerificationData(verificationTask.id);
-    } catch (err) { console.error('Approve failed:', err); }
+  const linkPr = async () => {
+    if (!currentDetail || !prUrl.trim()) return;
+    await fetch(`${API_BASE}/api/tasks/${currentDetail.id}/pr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pr_url: prUrl.trim(), owner: prOwner.trim(), repo: prRepo.trim() }),
+    });
+    setPrUrl('');
+    setPrOwner('');
+    setPrRepo('');
+    setDetailTask(await loadTaskDetail(currentDetail.id));
   };
 
-  const handleRequestChanges = async () => {
-    if (!verificationTask) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${verificationTask.id}/request-changes`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: approvalNotes }),
-      });
-      setApprovalNotes('');
-      fetchData();
-      fetchVerificationData(verificationTask.id);
-    } catch (err) { console.error('Request changes failed:', err); }
+  const refreshPrs = async () => {
+    if (!currentDetail) return;
+    await fetch(`${API_BASE}/api/tasks/${currentDetail.id}/pr/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ owner: prOwner.trim(), repo: prRepo.trim() }),
+    });
+    setDetailTask(await loadTaskDetail(currentDetail.id));
   };
 
-  const handleSendBack = async () => {
-    if (!verificationTask) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${verificationTask.id}/send-back`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ notes: approvalNotes }),
-      });
-      setApprovalNotes('');
-      fetchData();
-      closeVerification();
-    } catch (err) { console.error('Send back failed:', err); }
+  const unlinkPr = async (prId: string) => {
+    if (!currentDetail) return;
+    await fetch(`${API_BASE}/api/pr/${prId}`, { method: 'DELETE' });
+    setDetailTask(await loadTaskDetail(currentDetail.id));
   };
-
-  const handleLinkPR = async () => {
-    if (!verificationTask || !prUrl) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${verificationTask.id}/pr`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pr_url: prUrl, owner: prOwner, repo: prRepo }),
-      });
-      setPrUrl('');
-      setPrOwner('');
-      setPrRepo('');
-      fetchVerificationData(verificationTask.id);
-    } catch (err) { console.error('Link PR failed:', err); }
-  };
-
-  const handleRefreshPRs = async () => {
-    if (!verificationTask) return;
-    try {
-      await fetch(`http://localhost:3001/api/tasks/${verificationTask.id}/pr/refresh`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ owner: prOwner, repo: prRepo }),
-      });
-      fetchVerificationData(verificationTask.id);
-    } catch (err) { console.error('Refresh PRs failed:', err); }
-  };
-
-  const handleUnlinkPR = async (id: string) => {
-    try { await fetch(`http://localhost:3001/api/pr/${id}`, { method: 'DELETE' }); fetchVerificationData(verificationTask!.id); }
-    catch (err) { console.error('Unlink PR failed:', err); }
-  };
-
-  // Filter tasks by selected lane
-  const filteredTasks = selectedLane === 'all' ? tasks : tasks.filter(t => t.lane_id === selectedLane);
-  const tasksByColumn = COLUMNS.reduce((acc, col) => { acc[col.id] = filteredTasks.filter(t => t.status === col.id); return acc; }, {} as Record<string, Task[]>);
-  
-  // Deadline alerts
-  const nowMs = Date.now();
-  const in48h = nowMs + 48 * 60 * 60 * 1000;
-  const in24h = nowMs + 24 * 60 * 60 * 1000;
-  const overdueTasks = filteredTasks.filter(t => t.deadline && t.deadline < nowMs && t.status !== 'complete');
-  const dueSoonTasks = filteredTasks.filter(t => t.deadline && t.deadline >= nowMs && t.deadline <= in48h && t.status !== 'complete');
-  const dueVerySoonTasks = filteredTasks.filter(t => t.deadline && t.deadline >= nowMs && t.deadline <= in24h && t.status !== 'complete');
-  
-  const getAgentName = (agentId: string | null) => { if (!agentId) return null; return agents.find(a => a.id === agentId)?.name || agentId; };
-  const formatDeadline = (ts: number | null) => { if (!ts) return null; const date = new Date(ts); const diffDays = Math.ceil((date.getTime() - nowMs) / (1000 * 60 * 60 * 24)); return { date: date.toLocaleDateString(), isOverdue: diffDays < 0, isDueSoon: diffDays >= 0 && diffDays <= 2, isDueVerySoon: diffDays >= 0 && diffDays <= 1 }; };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white">
-      {/* Header */}
-      <header className="bg-slate-800 border-b border-slate-700 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <h1 className="text-xl font-bold">Philip-Mildred Command Center</h1>
-          <div className="flex items-center gap-4">
-            {/* View Mode Toggle */}
-            <div className="flex bg-slate-700 rounded-lg p-1">
-              <button onClick={() => setViewMode('board')} className={`px-3 py-1 rounded text-sm ${viewMode === 'board' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Board</button>
-              <button onClick={() => setViewMode('dashboard')} className={`px-3 py-1 rounded text-sm ${viewMode === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>Dashboard</button>
-              <button onClick={() => setViewMode('office')} className={`px-3 py-1 rounded text-sm ${viewMode === 'office' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>🏢 Office</button>
+    <div className="min-h-screen bg-slate-950 text-white">
+      <header className="sticky top-0 z-30 border-b border-slate-800 bg-slate-950/90 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-6 py-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.32em] text-slate-500">Telegram-driven operations mirror</p>
+            <h1 className="text-2xl font-semibold">Philip–Mildred Mission Control</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex rounded-xl border border-slate-800 bg-slate-900 p-1 text-sm">
+              {(['dashboard', 'board', 'office'] as ViewMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`rounded-lg px-3 py-1.5 capitalize transition ${viewMode === mode ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {mode}
+                </button>
+              ))}
             </div>
-            {/* Lane Selector */}
-            <select value={selectedLane} onChange={e => setSelectedLane(e.target.value)} className="bg-slate-700 rounded px-3 py-1 text-sm">
-              <option value="all">All Lanes</option>
-              {lanes.map(lane => <option key={lane.id} value={lane.id}>{lane.name}</option>)}
+            <select
+              value={selectedLane}
+              onChange={(event) => setSelectedLane(event.target.value)}
+              className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-sm text-slate-200"
+            >
+              <option value="all">All lanes</option>
+              {lanes.map((lane) => (
+                <option key={lane.id} value={lane.id}>{lane.name}</option>
+              ))}
             </select>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${status.gateway_connected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-sm text-slate-400">Gateway: {status.gateway_connected ? 'Connected' : 'Disconnected'}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'}`} />
-              <span className="text-sm text-slate-400">WS: {connected ? 'Connected' : 'Disconnected'}</span>
-            </div>
+            <button onClick={openCreateTask} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500">
+              New task mirror
+            </button>
+            <ConnectionBadge label="Gateway" online={Boolean(status.gateway_connected)} />
+            <ConnectionBadge label="Realtime" online={connected} />
           </div>
         </div>
       </header>
 
-      <main className="p-6">
-        {/* Deadline Alerts Banner */}
-        {(overdueTasks.length > 0 || dueVerySoonTasks.length > 0) && (
-          <div className="mb-6 p-4 rounded-lg border">
-            {overdueTasks.length > 0 && (
-              <div className="flex items-center gap-2 text-red-400 mb-2">
-                <span className="text-xl">🚨</span>
-                <span className="font-medium">{overdueTasks.length} overdue task{overdueTasks.length > 1 ? 's' : ''}!</span>
-              </div>
-            )}
-            {dueVerySoonTasks.length > 0 && (
-              <div className="flex items-center gap-2 text-orange-400 mb-2">
-                <span className="text-xl">⚠️</span>
-                <span className="font-medium">{dueVerySoonTasks.length} due within 24h</span>
-              </div>
-            )}
-            {dueSoonTasks.length > 0 && (
-              <div className="flex items-center gap-2 text-yellow-400">
-                <span className="text-xl">📅</span>
-                <span className="font-medium">{dueSoonTasks.length} due within 48h</span>
-              </div>
-            )}
-          </div>
+      <main className="mx-auto max-w-7xl px-6 py-6">
+        {(overdueTasks.length > 0 || blockedTasks.length > 0) && (
+          <section className="mb-6 grid gap-4 md:grid-cols-2">
+            <AlertCard tone="red" title={`${overdueTasks.length} overdue tasks`} body="These tasks are slipping beyond their promised timeline." />
+            <AlertCard tone="amber" title={`${blockedTasks.length} blocked tasks`} body="There are active blockers that need Mildred’s attention or user input." />
+          </section>
         )}
 
-        {/* Dashboard View */}
         {viewMode === 'dashboard' && dashboardStats && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xl font-bold">Dashboard</h2>
-              <button onClick={() => setShowWeeklySummary(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg text-sm">📊 Generate Weekly Summary</button>
-            </div>
-            
-            {/* Quick Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-2xl font-bold">{dashboardStats.totalTasks}</div>
-                <div className="text-sm text-slate-400">Total Tasks</div>
-              </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-2xl font-bold text-green-500">{dashboardStats.byStatus.complete}</div>
-                <div className="text-sm text-slate-400">Completed</div>
-              </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-2xl font-bold text-amber-500">{dashboardStats.byStatus.in_progress}</div>
-                <div className="text-sm text-slate-400">In Progress</div>
-              </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-2xl font-bold text-red-500">{dashboardStats.overdue}</div>
-                <div className="text-sm text-slate-400">Overdue</div>
-              </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-2xl font-bold text-orange-500">{dashboardStats.dueSoon}</div>
-                <div className="text-sm text-slate-400">Due Soon</div>
-              </div>
-              <div className="bg-slate-800 rounded-lg p-4">
-                <div className="text-2xl font-bold text-purple-500">{dashboardStats.activeAgents}</div>
-                <div className="text-sm text-slate-400">Active Agents</div>
-              </div>
-            </div>
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+              <StatCard label="Active work" value={activeTasks.length} accent="text-blue-300" />
+              <StatCard label="Verification" value={dashboardStats.byStatus.verification} accent="text-purple-300" />
+              <StatCard label="Completed" value={dashboardStats.byStatus.complete} accent="text-green-300" />
+              <StatCard label="Blocked" value={dashboardStats.blocked} accent="text-amber-300" />
+              <StatCard label="Agents active" value={dashboardStats.activeAgents} accent="text-cyan-300" />
+              <StatCard label="Actual cost" value={`$${costSummary.totals.actual.toFixed(2)}`} accent="text-emerald-300" />
+            </section>
 
-            {/* Lane Stats */}
-            <div className="bg-slate-800 rounded-lg p-4">
-              <h3 className="font-semibold mb-4">Portfolio Overview</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {dashboardStats.laneStats.map(lane => (
-                  <div key={lane.id} className="bg-slate-700 rounded-lg p-4" style={{ borderLeft: `4px solid ${lane.color}` }}>
-                    <div className="font-medium mb-2">{lane.name}</div>
-                    <div className="flex justify-between text-sm mb-2">
-                      <span className="text-slate-400">{lane.completed}/{lane.total} tasks</span>
-                      <span className="text-green-400">{lane.completionRate}%</span>
-                    </div>
-                    <div className="w-full bg-slate-600 rounded-full h-2">
-                      <div className="h-2 rounded-full" style={{ width: `${lane.completionRate}%`, backgroundColor: lane.color }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Cost Summary */}
-            <div className="bg-slate-800 rounded-lg p-4">
-              <h3 className="font-semibold mb-4">Cost Tracking</h3>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="bg-slate-700 rounded-lg p-4">
-                  <div className="text-2xl font-bold">{costTotals.tokens.toLocaleString()}</div>
-                  <div className="text-sm text-slate-400">Tokens Used</div>
+            <section className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+              <Panel title="Active operations">
+                <div className="space-y-3">
+                  {activeTasks.length === 0 && <EmptyState message="No active work. New Telegram requests will appear here first." />}
+                  {activeTasks.map((task) => (
+                    <WatchRow
+                      key={task.id}
+                      task={task}
+                      onOpen={() => void openTaskDetail(task.id)}
+                      onAdvance={(nextStatus) => void updateTaskStatus(task.id, nextStatus)}
+                    />
+                  ))}
                 </div>
-                <div className="bg-slate-700 rounded-lg p-4">
-                  <div className="text-2xl font-bold">${costTotals.estimated.toFixed(2)}</div>
-                  <div className="text-sm text-slate-400">Estimated Cost</div>
-                </div>
-                <div className="bg-slate-700 rounded-lg p-4">
-                  <div className="text-2xl font-bold text-green-500">${costTotals.actual.toFixed(2)}</div>
-                  <div className="text-sm text-slate-400">Actual Cost</div>
-                </div>
-              </div>
-            </div>
+              </Panel>
 
-            {/* Recent Activity */}
-            <div className="bg-slate-800 rounded-lg p-4">
-              <h3 className="font-semibold mb-4">Recent Activity</h3>
-              <div className="space-y-2">
-                {dashboardStats.recentActivity.slice(0, 5).map(task => (
-                  <div key={task.id} className="flex items-center justify-between bg-slate-700 rounded p-3">
-                    <div>
-                      <div className="font-medium">{task.title}</div>
-                      <div className="text-xs text-slate-400">{new Date(task.updated_at).toLocaleString()}</div>
-                    </div>
-                    <span className={`px-2 py-1 rounded text-xs ${task.status === 'complete' ? 'bg-green-600' : task.status === 'in_progress' ? 'bg-amber-600' : 'bg-slate-600'}`}>
-                      {task.status.replace('_', ' ')}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Board View */}
-        {viewMode === 'board' && (
-        <>
-        {/* Agent Panel */}
-        <section className="mb-8">
-          <h2 className="text-lg font-semibold mb-4">Agents</h2>
-          {agents.length === 0 ? (
-            <p className="text-slate-400">No agents connected</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {agents.map(agent => <AgentCard key={agent.id} agent={agent} />)}
-            </div>
-          )}
-        </section>
-
-        {/* Kanban Board */}
-        <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Tasks</h2>
-            <button onClick={() => setShowModal(true)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors">+ New Task</button>
-          </div>
-          
-          <div className="flex gap-4 overflow-x-auto pb-4">
-            {COLUMNS.map(column => (
-              <div key={column.id} className="flex-shrink-0 w-72" onDragOver={handleDragOver} onDrop={() => handleDrop(column.id)}>
-                <div className={`${column.color} rounded-t-lg px-4 py-2 font-semibold`}>
-                  {column.label}
-                  <span className="ml-2 text-sm opacity-75">({tasksByColumn[column.id]?.length || 0})</span>
-                </div>
-                <div className="bg-slate-800 rounded-b-lg p-2 min-h-[200px] border border-t-0 border-slate-700">
-                  {tasksByColumn[column.id]?.map(task => (
-                    <div key={task.id} draggable onDragStart={() => handleDragStart(task)}
-                      className="bg-slate-700 rounded p-3 mb-2 cursor-move hover:bg-slate-600 transition-colors"
-                      onClick={() => column.id === 'verification' ? openVerification(task) : setEditingTask(task)}>
-                      <h4 className="font-medium mb-1">{task.title}</h4>
-                      {task.description && <p className="text-sm text-slate-400 mb-2 line-clamp-2">{task.description}</p>}
-                      {task.agent_id && <div className="text-xs text-blue-400 mb-1">👤 {getAgentName(task.agent_id)}</div>}
-                      {task.deadline && <div className={`text-xs mb-1 ${formatDeadline(task.deadline)?.isOverdue ? 'text-red-400' : 'text-slate-400'}`}>📅 {formatDeadline(task.deadline)?.date}</div>}
-                      {task.blocker_reason && <div className="text-xs text-red-400 bg-red-900/30 rounded px-2 py-1 mt-1">🚫 {task.blocker_reason}</div>}
-                      {column.id === 'verification' && <div className="text-xs text-purple-400 mt-2">🔍 Click to verify</div>}
+              <Panel title="Owner visibility">
+                <div className="space-y-4">
+                  {agents.map((agent) => (
+                    <div key={agent.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <p className="font-medium text-slate-100">{agent.name}</p>
+                        <span className="text-xs uppercase tracking-wide text-slate-400">{agent.status}</span>
+                      </div>
+                      <p className="text-sm text-slate-400">Current mirror: {tasks.find((task) => task.id === agent.current_task_id)?.title ?? 'No task assigned'}</p>
                     </div>
                   ))}
                 </div>
-              </div>
-            ))}
+              </Panel>
+            </section>
+
+            <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+              <Panel title="Recent completions">
+                <div className="space-y-3">
+                  {completedTasks.length === 0 && <EmptyState message="Completed work will surface here with readable summaries." />}
+                  {completedTasks.map((task) => (
+                    <button
+                      key={task.id}
+                      onClick={() => void openTaskDetail(task.id)}
+                      className="w-full rounded-2xl border border-slate-800 bg-slate-900/60 p-4 text-left transition hover:border-slate-700 hover:bg-slate-900"
+                    >
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-slate-100">{task.title}</p>
+                          <p className="mt-1 text-sm text-slate-400">{task.completion_summary || task.delivery_notes || task.request_summary || 'No completion summary yet.'}</p>
+                        </div>
+                        <StatusBadge status={task.status} />
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                        <span>{task.agent_name || 'Unassigned'}</span>
+                        <span>{task.lane_name || 'No lane'}</span>
+                        <span>{formatDateTime(task.updated_at)}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel title="Portfolio lanes">
+                <div className="space-y-3">
+                  {dashboardStats.laneStats.map((lane) => (
+                    <div key={lane.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: lane.color }} />
+                          <p className="font-medium">{lane.name}</p>
+                        </div>
+                        <span className="text-sm text-slate-400">{lane.completed}/{lane.total}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                        <div className="h-full rounded-full" style={{ width: `${lane.completionRate}%`, backgroundColor: lane.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+            </section>
+
+            <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+              <Panel title="Recent activity feed">
+                <div className="space-y-3">
+                  {dashboardStats.recentActivity.map((task) => (
+                    <div key={task.id} className="rounded-2xl border border-slate-800 bg-slate-900/60 p-4">
+                      <div className="mb-2 flex items-start justify-between gap-3">
+                        <div>
+                          <p className="font-medium">{task.title}</p>
+                          <p className="text-sm text-slate-400">{task.request_summary || task.description || 'Task updated'}</p>
+                        </div>
+                        <StatusBadge status={task.status} />
+                      </div>
+                      <div className="flex flex-wrap gap-3 text-xs text-slate-500">
+                        <span>{task.agent_name || 'Unassigned'}</span>
+                        <span>{formatDateTime(task.updated_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </Panel>
+
+              <Panel title="Agents">
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
+                  {agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
+                </div>
+              </Panel>
+            </section>
           </div>
-        </section>
-        </>
         )}
 
-        {/* Office View */}
-        {viewMode === 'office' && (
-          <OfficePage />
+        {viewMode === 'board' && (
+          <div className="space-y-6">
+            <Panel title="Manual board view" subtitle="Still available for oversight, but de-emphasized in favor of the live mirror.">
+              <div className="flex gap-4 overflow-x-auto pb-4">
+                {STATUSES.map((column) => (
+                  <div key={column.id} className="w-80 flex-shrink-0 rounded-3xl border border-slate-800 bg-slate-900/80">
+                    <div className="border-b border-slate-800 px-4 py-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="font-medium text-slate-100">{column.label}</p>
+                          <p className="text-xs text-slate-500">{tasksByStatus[column.id].length} tasks</p>
+                        </div>
+                        <StatusBadge status={column.id} />
+                      </div>
+                    </div>
+                    <div className="space-y-3 p-4">
+                      {tasksByStatus[column.id].map((task) => (
+                        <div key={task.id} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+                          <button className="w-full text-left" onClick={() => void openTaskDetail(task.id)}>
+                            <p className="font-medium text-slate-100">{task.title}</p>
+                            <p className="mt-1 text-sm text-slate-400">{task.request_summary || task.description || 'No description'}</p>
+                          </button>
+                          <div className="mt-3 space-y-2 text-xs text-slate-500">
+                            <div className="flex items-center justify-between gap-3">
+                              <span>{task.agent_name || 'Unassigned'}</span>
+                              <span>{task.lane_name || 'No lane'}</span>
+                            </div>
+                            <div className="flex items-center justify-between gap-3">
+                              <span>{formatShortDate(task.deadline)}</span>
+                              {task.status === 'verification' ? (
+                                <button onClick={() => void openVerification(task.id)} className="text-purple-300 hover:text-purple-200">Open verification</button>
+                              ) : (
+                                <button onClick={() => void openEditTask(task.id)} className="text-blue-300 hover:text-blue-200">Edit</button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {tasksByStatus[column.id].length === 0 && <EmptyState message={`No ${column.label.toLowerCase()} tasks.`} />}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Panel>
+          </div>
         )}
+
+        {viewMode === 'office' && <OfficePage apiBase={API_BASE} wsUrl={`${WS_BASE}/ws/office`} />}
       </main>
 
-      {/* Weekly Summary Modal */}
-      {showWeeklySummary && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg w-full max-w-2xl border border-slate-700">
-            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Weekly Summary</h2>
-              <button onClick={() => setShowWeeklySummary(false)} className="text-slate-400 hover:text-white text-2xl">&times;</button>
-            </div>
-            <div className="p-6">
-              <p className="text-slate-400 mb-4">Generate a weekly summary report with:</p>
-              <ul className="list-disc list-inside text-slate-300 mb-6 space-y-1">
-                <li>Completed, in-progress, and blocked tasks</li>
-                <li>Cost summary for the week</li>
-                <li>Upcoming deadlines (next 7 days)</li>
-              </ul>
-              <button onClick={async () => {
-                await fetch('http://localhost:3001/api/weekly-summaries/generate', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({})
-                });
-                fetchData();
-                setShowWeeklySummary(false);
-              }} className="w-full bg-blue-600 hover:bg-blue-700 py-3 rounded-lg font-medium">Generate Summary</button>
-            </div>
-          </div>
-        </div>
+      {showComposer && (
+        <TaskComposer
+          draft={taskDraft}
+          setDraft={setTaskDraft}
+          agents={agents}
+          lanes={lanes}
+          editing={Boolean(editingTask)}
+          onClose={resetComposer}
+          onDelete={editingTask ? () => void deleteTask(editingTask.id) : undefined}
+          onSubmit={() => void submitTask()}
+        />
       )}
 
-      {/* Task Modal */}
-      {(showModal || editingTask) && (
-        <TaskModal task={editingTask} agents={agents} lanes={lanes} onSave={editingTask ? handleUpdateTask : handleCreateTask}
-          onClose={() => { setShowModal(false); setEditingTask(null); }}
-          onDelete={editingTask ? () => { handleDeleteTask(editingTask.id); setEditingTask(null); } : undefined} />
-      )}
-
-      {/* Phase 3: Verification Panel */}
-      {verificationTask && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-slate-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto border border-slate-700">
-            <div className="p-6 border-b border-slate-700 flex items-center justify-between">
-              <h2 className="text-xl font-semibold">Verification: {verificationTask.title}</h2>
-              <button onClick={closeVerification} className="text-slate-400 hover:text-white text-2xl">&times;</button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Task Info */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-2">Task Details</h3>
-                <p className="text-slate-300">{verificationTask.description || 'No description'}</p>
-                {verificationTask.promise_date && (
-                  <p className="text-sm text-yellow-400 mt-2">📌 Promise Date: {verificationTask.promise_date}</p>
-                )}
-                {verificationTask.delivery_notes && (
-                  <p className="text-sm text-blue-400 mt-2">📝 Delivery Notes: {verificationTask.delivery_notes}</p>
-                )}
-              </div>
-
-              {/* GitHub PRs */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-medium">GitHub PRs</h3>
-                  <button onClick={handleRefreshPRs} className="text-xs bg-slate-600 hover:bg-slate-500 px-2 py-1 rounded">🔄 Refresh</button>
-                </div>
-                
-                {prs.length === 0 ? (
-                  <p className="text-slate-400 text-sm">No PRs linked</p>
-                ) : (
-                  <div className="space-y-2 mb-3">
-                    {prs.map(pr => (
-                      <div key={pr.id} className="flex items-center justify-between bg-slate-600 rounded p-2">
-                        <div>
-                          <a href={pr.pr_url} target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline">
-                            PR #{pr.pr_number}
-                          </a>
-                          <span className={`ml-2 text-xs px-2 py-0.5 rounded ${pr.status === 'merged' ? 'bg-purple-600' : pr.status === 'closed' ? 'bg-red-600' : 'bg-green-600'}`}>
-                            {pr.status}
-                          </span>
-                          <span className={`ml-1 text-xs px-2 py-0.5 rounded ${pr.ci_status === 'passing' ? 'bg-green-600' : pr.ci_status === 'failing' ? 'bg-red-600' : 'bg-yellow-600'}`}>
-                            CI: {pr.ci_status}
-                          </span>
-                        </div>
-                        <button onClick={() => handleUnlinkPR(pr.id)} className="text-red-400 hover:text-red-300 text-sm">Unlink</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-2 mt-3">
-                  <input type="text" placeholder="PR URL (e.g., https://github.com/user/repo/pull/123)" value={prUrl}
-                    onChange={e => setPrUrl(e.target.value)} className="flex-1 bg-slate-600 rounded px-3 py-1 text-sm" />
-                  <input type="text" placeholder="Owner" value={prOwner} onChange={e => setPrOwner(e.target.value)} className="w-24 bg-slate-600 rounded px-3 py-1 text-sm" />
-                  <input type="text" placeholder="Repo" value={prRepo} onChange={e => setPrRepo(e.target.value)} className="w-24 bg-slate-600 rounded px-3 py-1 text-sm" />
-                  <button onClick={handleLinkPR} className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded text-sm">Link</button>
-                </div>
-              </div>
-
-              {/* Evidence */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Evidence</h3>
-                
-                {evidence.length === 0 ? (
-                  <p className="text-slate-400 text-sm">No evidence uploaded</p>
-                ) : (
-                  <div className="space-y-2 mb-3">
-                    {evidence.map(ev => (
-                      <div key={ev.id} className="flex items-center justify-between bg-slate-600 rounded p-2">
-                        <div className="flex items-center gap-2">
-                          {ev.mime_type.startsWith('image/') ? '🖼️' : ev.mime_type === 'application/pdf' ? '📄' : '📎'}
-                          <span className="text-sm">{ev.original_name}</span>
-                          <span className="text-xs text-slate-400">({Math.round(ev.size / 1024)}KB)</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <a href={`http://localhost:3001/api/evidence/${ev.id}/download`} target="_blank" rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 text-sm">Download</a>
-                          <button onClick={() => handleDeleteEvidence(ev.id)} className="text-red-400 hover:text-red-300 text-sm">Delete</button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*,.pdf,.txt,.log"
-                  className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-600 file:text-white hover:file:bg-blue-700" />
-              </div>
-
-              {/* Approval History */}
-              {approvals.length > 0 && (
-                <div className="bg-slate-700/50 rounded-lg p-4">
-                  <h3 className="font-medium mb-3">Approval History</h3>
-                  <div className="space-y-2">
-                    {approvals.map(ap => (
-                      <div key={ap.id} className="bg-slate-600 rounded p-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-xs px-2 py-0.5 rounded ${ap.decision === 'approve' ? 'bg-green-600' : ap.decision === 'request_changes' ? 'bg-yellow-600' : 'bg-red-600'}`}>
-                            {ap.decision.replace('_', ' ').toUpperCase()}
-                          </span>
-                          <span className="text-xs text-slate-400">by {ap.decided_by}</span>
-                          <span className="text-xs text-slate-500">{new Date(ap.decided_at).toLocaleString()}</span>
-                        </div>
-                        {ap.notes && <p className="text-sm text-slate-300 mt-1">{ap.notes}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Approval Actions */}
-              <div className="bg-slate-700/50 rounded-lg p-4">
-                <h3 className="font-medium mb-3">Philip's Approval</h3>
-                <textarea placeholder="Notes (optional)..." value={approvalNotes} onChange={e => setApprovalNotes(e.target.value)}
-                  className="w-full bg-slate-600 rounded px-3 py-2 text-white h-20 mb-3" />
-                <div className="flex gap-3">
-                  <button onClick={handleApprove} className="flex-1 bg-green-600 hover:bg-green-700 py-2 rounded font-medium">✅ Approve</button>
-                  <button onClick={handleRequestChanges} className="flex-1 bg-yellow-600 hover:bg-yellow-700 py-2 rounded font-medium">🔄 Request Changes</button>
-                  <button onClick={handleSendBack} className="flex-1 bg-red-600 hover:bg-red-700 py-2 rounded font-medium">↩️ Send Back to Backlog</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {currentDetail && (
+        <TaskDetailDrawer
+          task={currentDetail}
+          agents={agents}
+          verificationMode={isVerificationOpen}
+          approvalNotes={approvalNotes}
+          setApprovalNotes={setApprovalNotes}
+          prUrl={prUrl}
+          prOwner={prOwner}
+          prRepo={prRepo}
+          setPrUrl={setPrUrl}
+          setPrOwner={setPrOwner}
+          setPrRepo={setPrRepo}
+          fileInputRef={fileInputRef}
+          onClose={closeDetail}
+          onEdit={() => void openEditTask(currentDetail.id)}
+          onAssign={(agentId) => void assignTask(currentDetail.id, agentId)}
+          onStatusChange={(nextStatus) => void updateTaskStatus(currentDetail.id, nextStatus)}
+          onOpenVerification={() => void openVerification(currentDetail.id)}
+          onUploadEvidence={(event) => void uploadEvidence(event)}
+          onDeleteEvidence={(evidenceId) => void deleteEvidence(evidenceId)}
+          onApprove={() => void runVerificationAction('approve')}
+          onRequestChanges={() => void runVerificationAction('request-changes')}
+          onSendBack={() => void runVerificationAction('send-back')}
+          onLinkPr={() => void linkPr()}
+          onRefreshPrs={() => void refreshPrs()}
+          onUnlinkPr={(prId) => void unlinkPr(prId)}
+        />
       )}
     </div>
   );
 }
 
-// Task Modal Component
-interface TaskModalProps {
-  task: Task | null;
-  agents: Agent[];
-  lanes: Lane[];
-  onSave: (data: Partial<Task>) => void;
-  onClose: () => void;
-  onDelete?: () => void;
+function ConnectionBadge({ label, online }: { label: string; online: boolean }) {
+  return (
+    <div className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-xs text-slate-300">
+      <span className={`h-2.5 w-2.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+      {label}
+    </div>
+  );
 }
 
-function TaskModal({ task, agents, lanes, onSave, onClose, onDelete }: TaskModalProps) {
-  const [title, setTitle] = useState(task?.title || '');
-  const [description, setDescription] = useState(task?.description || '');
-  const [status, setStatus] = useState(task?.status || 'backlog');
-  const [agentId, setAgentId] = useState(task?.agent_id || '');
-  const [laneId, setLaneId] = useState(task?.lane_id || '');
-  const [deadline, setDeadline] = useState(task?.deadline ? new Date(task.deadline).toISOString().split('T')[0] : '');
-  const [blockerReason, setBlockerReason] = useState(task?.blocker_reason || '');
-  const [promiseDate, setPromiseDate] = useState(task?.promise_date || '');
-  const [deliveryNotes, setDeliveryNotes] = useState(task?.delivery_notes || '');
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave({
-      title, description, status,
-      agent_id: agentId || null,
-      lane_id: laneId || null,
-      deadline: deadline ? new Date(deadline).getTime() : null,
-      blocker_reason: blockerReason || null,
-      promise_date: promiseDate || undefined,
-      delivery_notes: deliveryNotes || undefined,
-    });
-  };
-
+function AlertCard({ title, body, tone }: { title: string; body: string; tone: 'red' | 'amber' }) {
+  const palette = tone === 'red'
+    ? 'border-red-500/30 bg-red-500/10 text-red-100'
+    : 'border-amber-500/30 bg-amber-500/10 text-amber-100';
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-slate-800 rounded-lg p-6 w-full max-w-md border border-slate-700 max-h-[90vh] overflow-y-auto">
-        <h3 className="text-lg font-semibold mb-4">{task ? 'Edit Task' : 'New Task'}</h3>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Title</label>
-            <input type="text" value={title} onChange={e => setTitle(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white" required />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Description</label>
-            <textarea value={description} onChange={e => setDescription(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white h-20" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Status</label>
-              <select value={status} onChange={e => setStatus(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white">
-                {COLUMNS.map(col => <option key={col.id} value={col.id}>{col.label}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Assign To</label>
-              <select value={agentId} onChange={e => setAgentId(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white">
-                <option value="">Unassigned</option>
-                {agents.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">Lane</label>
-              <select value={laneId} onChange={e => setLaneId(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white">
-                <option value="">No Lane</option>
-                {lanes.map(lane => <option key={lane.id} value={lane.id}>{lane.name}</option>)}
-              </select>
-            </div>
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Deadline</label>
-            <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white" />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Promise Date</label>
-            <input type="date" value={promiseDate} onChange={e => setPromiseDate(e.target.value)} className="w-full bg-slate-700 rounded px-3 py-2 text-white" />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Blocker Reason</label>
-            <input type="text" value={blockerReason} onChange={e => setBlockerReason(e.target.value)} placeholder="What's blocking this task?"
-              className="w-full bg-slate-700 rounded px-3 py-2 text-white" />
-          </div>
-          <div>
-            <label className="block text-sm text-slate-400 mb-1">Delivery Notes</label>
-            <textarea value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} placeholder="Post-completion learnings..."
-              className="w-full bg-slate-700 rounded px-3 py-2 text-white h-16" />
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 py-2 rounded font-medium">{task ? 'Save Changes' : 'Create Task'}</button>
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-600 hover:bg-slate-500 rounded">Cancel</button>
-            {onDelete && <button type="button" onClick={onDelete} className="px-4 py-2 bg-red-600 hover:bg-red-700 rounded">Delete</button>}
-          </div>
-        </form>
+    <div className={`rounded-2xl border px-5 py-4 ${palette}`}>
+      <p className="font-medium">{title}</p>
+      <p className="mt-1 text-sm text-slate-300">{body}</p>
+    </div>
+  );
+}
+
+function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5 shadow-[0_0_0_1px_rgba(15,23,42,0.4)]">
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-100">{title}</h2>
+          {subtitle && <p className="mt-1 text-sm text-slate-400">{subtitle}</p>}
+        </div>
       </div>
+      {children}
+    </section>
+  );
+}
+
+function StatCard({ label, value, accent }: { label: string; value: string | number; accent: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/80 p-4">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className={`mt-2 text-3xl font-semibold ${accent}`}>{value}</p>
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/50 px-4 py-6 text-sm text-slate-500">{message}</div>;
+}
+
+function StatusBadge({ status }: { status: StatusId }) {
+  const meta = statusMeta(status);
+  return <span className={`rounded-full border px-2.5 py-1 text-xs font-medium ${meta.tone}`}>{meta.label}</span>;
+}
+
+function WatchRow({ task, onOpen, onAdvance }: { task: Task; onOpen: () => void; onAdvance: (status: StatusId) => void }) {
+  const nextAction: Record<StatusId, StatusId | null> = {
+    backlog: 'ready',
+    ready: 'in_progress',
+    in_progress: 'verification',
+    verification: 'complete',
+    complete: null,
+  };
+  const nextStatus = nextAction[task.status];
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <button onClick={onOpen} className="min-w-0 flex-1 text-left">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <StatusBadge status={task.status} />
+            <span className="text-xs uppercase tracking-wide text-slate-500">{task.source || 'telegram'}</span>
+          </div>
+          <p className="text-base font-medium text-slate-100">{task.title}</p>
+          <p className="mt-1 text-sm text-slate-400">{task.request_summary || task.description || 'No task summary yet.'}</p>
+          <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
+            <span>Owner: {task.agent_name || 'Unassigned'}</span>
+            <span>Lane: {task.lane_name || 'No lane'}</span>
+            <span>Updated: {formatDateTime(task.updated_at)}</span>
+          </div>
+          {task.blocker_reason && <p className="mt-3 text-sm text-amber-300">Blocked: {task.blocker_reason}</p>}
+        </button>
+        {nextStatus && (
+          <button onClick={() => onAdvance(nextStatus)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-slate-200 hover:border-slate-600 hover:bg-slate-800">
+            Move to {statusMeta(nextStatus).label}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TaskComposer({
+  draft,
+  setDraft,
+  agents,
+  lanes,
+  editing,
+  onClose,
+  onDelete,
+  onSubmit,
+}: {
+  draft: TaskDraft;
+  setDraft: React.Dispatch<React.SetStateAction<TaskDraft>>;
+  agents: Agent[];
+  lanes: Lane[];
+  editing: boolean;
+  onClose: () => void;
+  onDelete?: () => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-40 bg-slate-950/70 p-4 backdrop-blur-sm">
+      <div className="mx-auto max-h-[92vh] max-w-3xl overflow-y-auto rounded-3xl border border-slate-800 bg-slate-900 p-6">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Mildred-operated task lifecycle</p>
+            <h2 className="text-2xl font-semibold text-slate-100">{editing ? 'Update mirrored task' : 'Create mirrored task'}</h2>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-slate-800 px-3 py-2 text-slate-400 hover:text-white">Close</button>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Task title">
+            <input value={draft.title} onChange={(event) => setDraft((prev) => ({ ...prev, title: event.target.value }))} className="field" placeholder="Ship verification fixes for Mission Control" />
+          </Field>
+          <Field label="Original requester">
+            <input value={draft.requester} onChange={(event) => setDraft((prev) => ({ ...prev, requester: event.target.value }))} className="field" placeholder="Philip" />
+          </Field>
+          <Field label="Telegram / request summary" className="md:col-span-2">
+            <textarea value={draft.request_summary} onChange={(event) => setDraft((prev) => ({ ...prev, request_summary: event.target.value }))} className="field min-h-24" placeholder="Summarize what Philip asked Mildred to do." />
+          </Field>
+          <Field label="Execution notes" className="md:col-span-2">
+            <textarea value={draft.description} onChange={(event) => setDraft((prev) => ({ ...prev, description: event.target.value }))} className="field min-h-24" placeholder="Optional internal execution detail for the operators." />
+          </Field>
+          <Field label="Owner">
+            <select value={draft.agent_id} onChange={(event) => setDraft((prev) => ({ ...prev, agent_id: event.target.value }))} className="field">
+              <option value="">Unassigned</option>
+              {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Portfolio lane">
+            <select value={draft.lane_id} onChange={(event) => setDraft((prev) => ({ ...prev, lane_id: event.target.value }))} className="field">
+              <option value="">No lane</option>
+              {lanes.map((lane) => <option key={lane.id} value={lane.id}>{lane.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Execution state">
+            <select value={draft.status} onChange={(event) => setDraft((prev) => ({ ...prev, status: event.target.value as StatusId }))} className="field">
+              {STATUSES.map((statusItem) => <option key={statusItem.id} value={statusItem.id}>{statusItem.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Source channel">
+            <input value={draft.source} onChange={(event) => setDraft((prev) => ({ ...prev, source: event.target.value }))} className="field" placeholder="telegram" />
+          </Field>
+          <Field label="Deadline">
+            <input type="date" value={draft.deadline} onChange={(event) => setDraft((prev) => ({ ...prev, deadline: event.target.value }))} className="field" />
+          </Field>
+          <Field label="Promised date">
+            <input type="date" value={draft.promise_date} onChange={(event) => setDraft((prev) => ({ ...prev, promise_date: event.target.value }))} className="field" />
+          </Field>
+          <Field label="Blocker / waiting reason" className="md:col-span-2">
+            <textarea value={draft.blocker_reason} onChange={(event) => setDraft((prev) => ({ ...prev, blocker_reason: event.target.value }))} className="field min-h-20" placeholder="Waiting for CI, approval, or external input" />
+          </Field>
+          <Field label="Completion summary" className="md:col-span-2">
+            <textarea value={draft.completion_summary} onChange={(event) => setDraft((prev) => ({ ...prev, completion_summary: event.target.value }))} className="field min-h-24" placeholder="Readable wrap-up for Philip once work is done." />
+          </Field>
+          <Field label="Delivery notes / artifacts" className="md:col-span-2">
+            <textarea value={draft.delivery_notes} onChange={(event) => setDraft((prev) => ({ ...prev, delivery_notes: event.target.value }))} className="field min-h-24" placeholder="PR links, evidence context, or notable follow-up." />
+          </Field>
+        </div>
+
+        <div className="mt-6 flex flex-wrap justify-end gap-3">
+          {onDelete && <button onClick={onDelete} className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm text-red-200 hover:bg-red-500/20">Delete task</button>}
+          <button onClick={onClose} className="rounded-xl border border-slate-800 px-4 py-2 text-sm text-slate-300 hover:text-white">Cancel</button>
+          <button onClick={onSubmit} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500">{editing ? 'Save task' : 'Create task'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <label className={`block ${className || ''}`}>
+      <span className="mb-2 block text-sm text-slate-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function TaskDetailDrawer({
+  task,
+  agents,
+  verificationMode,
+  approvalNotes,
+  setApprovalNotes,
+  prUrl,
+  prOwner,
+  prRepo,
+  setPrUrl,
+  setPrOwner,
+  setPrRepo,
+  fileInputRef,
+  onClose,
+  onEdit,
+  onAssign,
+  onStatusChange,
+  onOpenVerification,
+  onUploadEvidence,
+  onDeleteEvidence,
+  onApprove,
+  onRequestChanges,
+  onSendBack,
+  onLinkPr,
+  onRefreshPrs,
+  onUnlinkPr,
+}: {
+  task: TaskDetail;
+  agents: Agent[];
+  verificationMode: boolean;
+  approvalNotes: string;
+  setApprovalNotes: React.Dispatch<React.SetStateAction<string>>;
+  prUrl: string;
+  prOwner: string;
+  prRepo: string;
+  setPrUrl: React.Dispatch<React.SetStateAction<string>>;
+  setPrOwner: React.Dispatch<React.SetStateAction<string>>;
+  setPrRepo: React.Dispatch<React.SetStateAction<string>>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
+  onClose: () => void;
+  onEdit: () => void;
+  onAssign: (agentId: string) => void;
+  onStatusChange: (nextStatus: StatusId) => void;
+  onOpenVerification: () => void;
+  onUploadEvidence: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onDeleteEvidence: (evidenceId: string) => void;
+  onApprove: () => void;
+  onRequestChanges: () => void;
+  onSendBack: () => void;
+  onLinkPr: () => void;
+  onRefreshPrs: () => void;
+  onUnlinkPr: (prId: string) => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm">
+      <aside className="ml-auto flex h-full w-full max-w-3xl flex-col border-l border-slate-800 bg-slate-950 shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-800 px-6 py-5">
+          <div>
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <StatusBadge status={task.status} />
+              <span className="text-xs uppercase tracking-[0.24em] text-slate-500">{task.source || 'telegram'} request</span>
+            </div>
+            <h2 className="text-2xl font-semibold text-slate-100">{task.title}</h2>
+            <p className="mt-2 text-sm text-slate-400">{task.request_summary || task.description || 'No request summary recorded yet.'}</p>
+          </div>
+          <button onClick={onClose} className="rounded-xl border border-slate-800 px-3 py-2 text-slate-400 hover:text-white">Close</button>
+        </div>
+
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+          <section className="grid gap-4 md:grid-cols-2">
+            <InfoCard label="Owner" value={task.agent?.name || 'Unassigned'} />
+            <InfoCard label="Lane" value={task.lane?.name || 'No lane'} />
+            <InfoCard label="Requested by" value={task.requester || 'Philip'} />
+            <InfoCard label="Promised date" value={task.promise_date || 'Not set'} />
+            <InfoCard label="Last updated" value={formatDateTime(task.updated_at)} />
+            <InfoCard label="Deadline" value={formatShortDate(task.deadline)} />
+          </section>
+
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h3 className="text-lg font-semibold text-slate-100">Lifecycle controls</h3>
+              <button onClick={onEdit} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-600">Edit details</button>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label="Assign owner">
+                <select value={task.agent_id || ''} onChange={(event) => onAssign(event.target.value)} className="field">
+                  <option value="">Unassigned</option>
+                  {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+                </select>
+              </Field>
+              <Field label="Move state">
+                <select value={task.status} onChange={(event) => onStatusChange(event.target.value as StatusId)} className="field">
+                  {STATUSES.map((statusItem) => <option key={statusItem.id} value={statusItem.id}>{statusItem.label}</option>)}
+                </select>
+              </Field>
+            </div>
+            {task.blocker_reason && <p className="mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">Blocked: {task.blocker_reason}</p>}
+          </section>
+
+          <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+            <Panel title="Readable completion report">
+              <div className="space-y-4 text-sm text-slate-300">
+                <DetailBlock title="Completion summary" body={task.completion_summary || 'No completion summary yet.'} />
+                <DetailBlock title="Delivery notes" body={task.delivery_notes || 'No delivery notes attached.'} />
+                <DetailBlock title="Execution notes" body={task.description || 'No internal execution notes.'} />
+              </div>
+            </Panel>
+            <Panel title="Verification">
+              <div className="space-y-3 text-sm text-slate-300">
+                <p>{verificationMode ? 'Verification panel is active for this task.' : 'Open verification to manage evidence, PRs, and approvals.'}</p>
+                <button onClick={onOpenVerification} className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-medium hover:bg-purple-500">Open verification flow</button>
+              </div>
+            </Panel>
+          </section>
+
+          <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+            <h3 className="mb-4 text-lg font-semibold text-slate-100">Task history</h3>
+            <div className="space-y-3">
+              {task.history.length === 0 && <EmptyState message="No lifecycle events recorded yet." />}
+              {task.history.map((event) => (
+                <div key={event.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-medium text-slate-100">{event.summary}</p>
+                    <span className="text-xs text-slate-500">{formatDateTime(event.created_at)}</span>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">{event.actor}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {verificationMode && (
+            <>
+              <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-slate-100">GitHub PRs</h3>
+                  <button onClick={onRefreshPrs} className="rounded-xl border border-slate-700 px-3 py-2 text-sm text-slate-200 hover:border-slate-600">Refresh</button>
+                </div>
+                <div className="space-y-3">
+                  {task.prs.length === 0 && <EmptyState message="No PR linked yet." />}
+                  {task.prs.map((pr) => (
+                    <div key={pr.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                          <a href={pr.pr_url} target="_blank" rel="noreferrer" className="font-medium text-blue-300 hover:text-blue-200">PR #{pr.pr_number}</a>
+                          <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
+                            <span>Status: {pr.status}</span>
+                            <span>CI: {pr.ci_status}</span>
+                          </div>
+                        </div>
+                        <button onClick={() => onUnlinkPr(pr.id)} className="text-sm text-red-300 hover:text-red-200">Unlink</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-[1fr_120px_120px_auto]">
+                  <input value={prUrl} onChange={(event) => setPrUrl(event.target.value)} className="field" placeholder="https://github.com/owner/repo/pull/123" />
+                  <input value={prOwner} onChange={(event) => setPrOwner(event.target.value)} className="field" placeholder="owner" />
+                  <input value={prRepo} onChange={(event) => setPrRepo(event.target.value)} className="field" placeholder="repo" />
+                  <button onClick={onLinkPr} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium hover:bg-blue-500">Link PR</button>
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+                <h3 className="mb-4 text-lg font-semibold text-slate-100">Evidence</h3>
+                <div className="space-y-3">
+                  {task.evidence.length === 0 && <EmptyState message="No evidence attached yet." />}
+                  {task.evidence.map((item) => (
+                    <div key={item.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                      <div>
+                        <p className="font-medium text-slate-100">{item.original_name}</p>
+                        <p className="text-sm text-slate-400">{Math.round(item.size / 1024)} KB • {formatDateTime(item.uploaded_at)}</p>
+                      </div>
+                      <div className="flex gap-3 text-sm">
+                        <a href={`${API_BASE}/api/evidence/${item.id}/download`} target="_blank" rel="noreferrer" className="text-blue-300 hover:text-blue-200">Download</a>
+                        <button onClick={() => onDeleteEvidence(item.id)} className="text-red-300 hover:text-red-200">Delete</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <input ref={fileInputRef} type="file" onChange={onUploadEvidence} accept="image/*,.pdf,.txt,.log" className="mt-4 block w-full text-sm text-slate-400 file:mr-4 file:rounded-xl file:border-0 file:bg-blue-600 file:px-4 file:py-2 file:text-white hover:file:bg-blue-500" />
+              </section>
+
+              <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
+                <h3 className="mb-4 text-lg font-semibold text-slate-100">Approval history & actions</h3>
+                <div className="space-y-3">
+                  {task.approvals.length === 0 && <EmptyState message="No approval decisions recorded yet." />}
+                  {task.approvals.map((approval) => (
+                    <div key={approval.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-medium text-slate-100">{approval.decision.replace('_', ' ')}</p>
+                        <span className="text-xs text-slate-500">{formatDateTime(approval.decided_at)}</span>
+                      </div>
+                      <p className="mt-1 text-sm text-slate-400">{approval.decided_by}</p>
+                      {approval.notes && <p className="mt-2 text-sm text-slate-300">{approval.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+                <textarea value={approvalNotes} onChange={(event) => setApprovalNotes(event.target.value)} className="field mt-4 min-h-24" placeholder="Verification notes for Philip / Mildred" />
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  <button onClick={onApprove} className="rounded-xl bg-green-600 px-4 py-2 text-sm font-medium hover:bg-green-500">Approve</button>
+                  <button onClick={onRequestChanges} className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-medium hover:bg-amber-500">Request changes</button>
+                  <button onClick={onSendBack} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium hover:bg-red-500">Send back</button>
+                </div>
+              </section>
+            </>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function InfoCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-sm font-medium text-slate-100">{value}</p>
+    </div>
+  );
+}
+
+function DetailBlock({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+      <p className="text-sm font-medium text-slate-100">{title}</p>
+      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-300">{body}</p>
     </div>
   );
 }
