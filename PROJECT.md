@@ -1,0 +1,159 @@
+# PROJECT.md — Mission Control / Command Center
+
+## Overview
+Mission Control is the **Philip–Mildred Command Center** project.
+
+- **Repo path:** `/Users/mildred/.openclaw/workspace/projects/command-center`
+- **Purpose:** a private, local-first dashboard that visualizes the real work Mildred is doing with agents across Philip’s portfolio.
+- **Primary interface:** **Telegram**. Philip should continue talking to Mildred in Telegram. Mission Control is the visibility layer, not the command surface.
+- **Local-first:** intended for local/internal use, not public deployment.
+
+## Product Objective (plain English)
+Philip talks to Mildred on Telegram.
+Mildred interprets the work, creates tasks, delegates to herself or other agents, and drives execution.
+Mission Control automatically shows that work in real time so Philip can watch what is happening without having to manage the board himself.
+When work is complete, Philip can open Mission Control to see the full report, history, evidence, and status — and Mildred also notifies Philip on Telegram.
+
+## Core Product Principles
+1. **Telegram-first** — Telegram remains the place for instructions, clarifications, approvals, and updates.
+2. **Mildred-operated** — Philip should not need to manually create routine tasks in Mission Control.
+3. **Live visualization** — Mission Control should reflect real work state, not a manually maintained fiction.
+4. **Agent visibility** — Philip should be able to see who owns a task, what they are doing, and where it stands.
+5. **Audit trail** — Every meaningful task should leave behind a readable record: request, owner, progress, output, and result.
+6. **Low-friction oversight** — Mission Control exists so Philip can watch and inspect, not duplicate work.
+
+## Primary Workflow
+1. Philip sends instruction on Telegram.
+2. Mildred interprets and structures the work.
+3. Mildred creates the task in Mission Control.
+4. Mildred assigns the task to herself or another agent.
+5. Mission Control updates in real time as status changes.
+6. Final report/evidence is attached to the task.
+7. Mildred notifies Philip on Telegram.
+8. Philip can open Mission Control anytime to inspect the full record.
+
+## What Mission Control Is
+- A live operations mirror of Philip’s work being coordinated by Mildred.
+- A status board showing active work, owners, progress, blockers, and completions.
+- A review surface for full reports, evidence, PR/CI details, and historical context.
+- A portfolio-wide dashboard across multiple lanes of work.
+
+## What Mission Control Is Not
+- Not the main place where Philip should create tasks.
+- Not a second inbox.
+- Not a second chat system.
+- Not a system that requires duplicating what was already said on Telegram.
+
+## Portfolio Lanes
+Current lane model:
+1. Hawco Development
+2. Company Theatre
+3. Self-e-Tape
+4. Personal
+
+## Tech Stack
+- **Frontend:** React 19 + TypeScript + Vite + TailwindCSS
+- **Backend:** Express + better-sqlite3
+- **Realtime:** WebSocket
+- **Gateway integration:** OpenClaw Gateway (`localhost:18789`)
+- **Frontend dev URL:** typically `http://localhost:5173/`
+- **Backend local port:** typically `3001`
+- **Database:** `server/data.db`
+
+## Phase History (verified from git)
+
+### Phase 1 — Initial command center setup
+**Commit:** `e4ae276`
+Built:
+- React/Vite frontend
+- Express backend
+- SQLite database
+- basic agent status dashboard
+- OpenClaw gateway integration
+- Tailwind setup
+
+### Runtime / hardening follow-up
+**Commits:** `e1d35cc`, `fe41bc8`, `0e55f94`
+Covered:
+- security documentation,
+- ESM `__dirname` / WebSocket fixes,
+- ignoring local DB artifact.
+
+### Phase 2 — Kanban workflow
+**Commit:** `54b9bc8`
+Built:
+- drag-and-drop kanban board,
+- task CRUD,
+- assignment to agents,
+- deadlines,
+- blockers,
+- workflow columns: Backlog / Ready / In Progress / Verification / Complete.
+
+### Phase 3 — Verification workflow
+**Verified via docs + code (`README.md`, `SECURITY.md`, `ARCHITECTURE.md`, `src/App.tsx`)**
+Built:
+- evidence uploads,
+- GitHub PR linking,
+- CI status tracking,
+- approval actions (Approve / Request Changes / Send Back),
+- delivery notes / historical record,
+- DB tables for evidence / approvals / PR tracking.
+
+### Phase 4 — Visual Office
+**Commit:** `c82252e`
+Built:
+- canvas-based visual office,
+- four agent desks (Dev, Mildred, Content, Research),
+- agent state visualization,
+- dialogue bubbles,
+- reports inbox tray,
+- `/ws/office` WebSocket endpoint,
+- office view toggle,
+- placeholder 32x32 sprites.
+
+## Reframed Product Direction (as of 2026-03-14)
+The existing manual dashboard / kanban app should now be treated as a foundation, not the final product direction.
+
+The next major evolution is to turn Mission Control into a **Telegram-driven operations mirror**.
+
+That means prioritizing:
+- automatic task creation by Mildred,
+- automatic assignment tracking,
+- live status updates from real work,
+- readable completion reports,
+- and strong visibility for Philip without requiring manual board management.
+
+## Current Known Repo State (as of 2026-03-14 reconstruction)
+- **Branch:** `main`
+- **HEAD:** `c82252e`
+- **Remote:** `origin/main`
+- **Uncommitted runtime data may exist locally:** `server/data.db`
+- Interpretation: source code was committed; local runtime data changed after use/testing.
+
+## Backup Evidence
+Mission Control / Command Center was included in full backup made the night of Mar 13:
+- `/Users/mildred/.openclaw/backups/2026-03-13-complete-backup-20260313-211155`
+
+This confirms the project was considered active and worth preserving alongside other priority projects.
+
+## Important Operating Notes
+- If `localhost:5173` is unreachable, do **not** assume the project is lost or broken; first verify whether the local Vite dev server is running.
+- For context rebuild after resets, use this file plus git history before claiming uncertainty.
+- Mission Control progress must be logged explicitly in daily memory after each substantial work block.
+- New feature decisions should be evaluated against the Telegram-first product objective above.
+
+## New Strategic Priorities
+1. **Office-first live ops** — the office becomes the primary homepage and status surface.
+2. **Automatic task lifecycle** — Mildred can create/update/complete tasks without Philip using the dashboard manually.
+3. **Agent assignment visibility** — tasks clearly show who owns them and what state they are in.
+4. **Readable agent states** — active, blocked, inactive, and finished states must be visually obvious.
+5. **Trusted Reports Tray** — completed work should land in a reviewed/approved archive.
+6. **Telegram notification loop** — Telegram remains the authoritative completion/update channel.
+7. **UI supports watching, not typing** — de-emphasize manual board maintenance.
+
+## Likely Next Build Direction
+1. Make the Office view the true homepage.
+2. Implement fixed desks + clear visual agent states.
+3. Make clicking an agent reveal useful plain-English task detail including model used.
+4. Add Mildred review/approval gate before reports appear as final in Reports Tray.
+5. Strengthen Reports Tray as the archive of trusted completed work.

@@ -41,11 +41,11 @@ const AVATAR_ASSETS: Record<string, string> = {
   content: contentAvatarAsset,
 };
 
-const AVATAR_OFFSETS: Record<string, { left: number; top: number; width: number }> = {
-  mildred: { left: 106, top: 18, width: 74 },
-  dev: { left: 106, top: 18, width: 74 },
-  research: { left: 106, top: 18, width: 74 },
-  content: { left: 106, top: 18, width: 74 },
+const AVATAR_OFFSETS: Record<string, { left: number; top: number; width: number; height: number }> = {
+  mildred: { left: 80, top: 10, width: 120, height: 120 },
+  dev: { left: 80, top: 10, width: 120, height: 120 },
+  research: { left: 80, top: 10, width: 120, height: 120 },
+  content: { left: 80, top: 10, width: 120, height: 120 },
 };
 
 export interface OfficeCanvasHandle {
@@ -204,8 +204,14 @@ function DeskStage({ desk, onSelectAgent }: { desk: OfficeDesk; onSelectAgent: (
           <img
             src={avatarAsset}
             alt=""
-            className={`pointer-events-none absolute object-contain [image-rendering:pixelated] avatar-breathing ${clickable ? 'group-hover:brightness-110' : ''}`}
-            style={{ left: avatarOffset.left * config.stage.scale, top: avatarOffset.top * config.stage.scale, width: avatarOffset.width * config.stage.scale }}
+            className={`pointer-events-none absolute object-cover [image-rendering:pixelated] avatar-breathing ${clickable ? 'group-hover:brightness-110' : ''}`}
+            style={{
+              left: avatarOffset.left * config.stage.scale,
+              top: avatarOffset.top * config.stage.scale,
+              width: avatarOffset.width * config.stage.scale,
+              height: avatarOffset.height * config.stage.scale,
+              borderRadius: '50%',
+            }}
           />
         )}
 
