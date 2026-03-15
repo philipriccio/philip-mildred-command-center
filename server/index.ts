@@ -49,6 +49,9 @@ interface TaskRow {
   delivery_notes: string | null;
   request_summary: string | null;
   completion_summary: string | null;
+  progress_summary: string | null;
+  next_step: string | null;
+  model_used: string | null;
   source: string | null;
   requester: string | null;
 }
@@ -114,11 +117,20 @@ interface OfficeAgentRow {
 
 interface OfficeReportRow {
   id: string;
+  task_id: string | null;
   agent_id: string;
   agent_name: string;
   task_title: string;
+  summary: string | null;
+  lane_name: string | null;
+  model_used: string | null;
   completed_at: number;
   acknowledged: number;
+  review_status: string;
+  reviewed_by: string | null;
+  reviewed_at: number | null;
+  approved_by: string | null;
+  approved_at: number | null;
 }
 
 app.use(helmet({
@@ -202,6 +214,9 @@ db.exec(`
     delivery_notes TEXT,
     request_summary TEXT,
     completion_summary TEXT,
+    progress_summary TEXT,
+    next_step TEXT,
+    model_used TEXT,
     source TEXT DEFAULT 'telegram',
     requester TEXT DEFAULT 'Philip',
     FOREIGN KEY (agent_id) REFERENCES agents(id),
@@ -286,11 +301,20 @@ db.exec(`
 
   CREATE TABLE IF NOT EXISTS office_reports (
     id TEXT PRIMARY KEY,
+    task_id TEXT,
     agent_id TEXT NOT NULL,
     agent_name TEXT NOT NULL,
     task_title TEXT NOT NULL,
+    summary TEXT,
+    lane_name TEXT,
+    model_used TEXT,
     completed_at INTEGER,
     acknowledged INTEGER DEFAULT 0,
+    review_status TEXT DEFAULT 'pending',
+    reviewed_by TEXT,
+    reviewed_at INTEGER,
+    approved_by TEXT,
+    approved_at INTEGER,
     FOREIGN KEY (agent_id) REFERENCES office_agents(id)
   );
 
@@ -315,8 +339,20 @@ const migrationStatements = [
   'ALTER TABLE tasks ADD COLUMN lane_id TEXT',
   'ALTER TABLE tasks ADD COLUMN request_summary TEXT',
   'ALTER TABLE tasks ADD COLUMN completion_summary TEXT',
+  'ALTER TABLE tasks ADD COLUMN progress_summary TEXT',
+  'ALTER TABLE tasks ADD COLUMN next_step TEXT',
+  'ALTER TABLE tasks ADD COLUMN model_used TEXT',
   "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'telegram'",
   "ALTER TABLE tasks ADD COLUMN requester TEXT DEFAULT 'Philip'",
+  'ALTER TABLE office_reports ADD COLUMN task_id TEXT',
+  'ALTER TABLE office_reports ADD COLUMN summary TEXT',
+  'ALTER TABLE office_reports ADD COLUMN lane_name TEXT',
+  'ALTER TABLE office_reports ADD COLUMN model_used TEXT',
+  "ALTER TABLE office_reports ADD COLUMN review_status TEXT DEFAULT 'pending'",
+  'ALTER TABLE office_reports ADD COLUMN reviewed_by TEXT',
+  'ALTER TABLE office_reports ADD COLUMN reviewed_at INTEGER',
+  'ALTER TABLE office_reports ADD COLUMN approved_by TEXT',
+  'ALTER TABLE office_reports ADD COLUMN approved_at INTEGER',
 ];
 
 for (const statement of migrationStatements) {
@@ -384,6 +420,7 @@ const selectApprovalsByTask = db.prepare<ApprovalRow>('SELECT * FROM approvals W
 const selectPrsByTask = db.prepare<PrTrackingRow>('SELECT * FROM pr_tracking WHERE task_id = ? ORDER BY last_checked DESC');
 const selectEventsByTask = db.prepare<TaskEventRow>('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at DESC');
 const selectOfficeAgentById = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE id = ?');
+const selectLatestOfficeReportByTaskId = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE task_id = ? ORDER BY completed_at DESC LIMIT 1');
 
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -424,6 +461,7 @@ function readTaskDetail(id: string) {
     evidence: selectEvidenceByTask.all(id),
     approvals: selectApprovalsByTask.all(id),
     prs: selectPrsByTask.all(id),
+    office_report: selectLatestOfficeReportByTaskId.get(id) ?? null,
     history: selectEventsByTask.all(id).map(event => ({
       ...event,
       details: parseJson<JsonObject>(event.details_json),
@@ -436,53 +474,99 @@ function syncAgentCurrentTask(agentId: string | null, taskId: string | null) {
   db.prepare('UPDATE agents SET current_task_id = ? WHERE id = ?').run(taskId, agentId);
 }
 
+function deriveOfficeState(task: TaskRow | null) {
+  if (!task || task.status === 'complete') {
+    return { officeState: 'inactive', taskProgress: 0, taskTitle: null as string | null };
+  }
+  if (task.blocker_reason) {
+    return { officeState: 'blocked', taskProgress: Math.max(task.status === 'verification' ? 85 : 45, 20), taskTitle: task.title };
+  }
+  if (task.status === 'verification') {
+    return { officeState: 'working', taskProgress: 90, taskTitle: task.title };
+  }
+  if (task.status === 'in_progress') {
+    return { officeState: 'working', taskProgress: 60, taskTitle: task.title };
+  }
+  if (task.status === 'ready') {
+    return { officeState: 'working', taskProgress: 20, taskTitle: task.title };
+  }
+  return { officeState: 'inactive', taskProgress: 0, taskTitle: null as string | null };
+}
+
 function syncOfficeAgentForTask(task: TaskRow) {
   if (!task.agent_id) return;
   const officeAgent = selectOfficeAgentById.get(task.agent_id);
   if (!officeAgent) return;
-  const officeState = task.status === 'complete'
-    ? 'idle'
-    : task.status === 'verification'
-      ? 'completing'
-      : task.status === 'in_progress'
-        ? 'working'
-        : 'idle';
-  const taskProgress = task.status === 'complete' ? 100 : task.status === 'verification' ? 90 : task.status === 'in_progress' ? 55 : task.status === 'ready' ? 20 : 0;
+  const { officeState, taskProgress, taskTitle } = deriveOfficeState(task);
   db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
-    .run(officeState, task.title, taskProgress, task.agent_id);
+    .run(officeState, taskTitle, taskProgress, task.agent_id);
   officeWss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(JSON.stringify({
         type: 'agent.state',
         agentId: task.agent_id,
         state: officeState,
-        task: task.title,
+        task: taskTitle,
         progress: taskProgress,
       }));
     }
   });
 }
 
-function createOfficeReport(task: TaskRow) {
-  if (!task.agent_id) return;
+function upsertOfficeReport(task: TaskRow, options?: { forceApproved?: boolean; reviewedBy?: string | null; approvedBy?: string | null }) {
+  if (!task.agent_id) return null;
   const officeAgent = selectOfficeAgentById.get(task.agent_id);
-  if (!officeAgent) return;
+  if (!officeAgent) return null;
+  const lane = task.lane_id ? selectLaneById.get(task.lane_id) : null;
+  const existing = selectLatestOfficeReportByTaskId.get(task.id);
+  const now = Date.now();
+  const autoApproved = task.agent_id === 'mildred' || Boolean(options?.forceApproved);
+  const reviewStatus = autoApproved ? 'approved' : 'pending';
+  const reviewedBy = autoApproved ? (options?.reviewedBy ?? 'Mildred') : null;
+  const approvedBy = autoApproved ? (options?.approvedBy ?? 'Mildred') : null;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE office_reports
+      SET agent_id = ?,
+          agent_name = ?,
+          task_title = ?,
+          summary = ?,
+          lane_name = ?,
+          model_used = ?,
+          completed_at = ?,
+          review_status = CASE WHEN ? = 1 THEN 'approved' ELSE COALESCE(review_status, 'pending') END,
+          reviewed_by = CASE WHEN ? = 1 THEN ? ELSE reviewed_by END,
+          reviewed_at = CASE WHEN ? = 1 THEN ? ELSE reviewed_at END,
+          approved_by = CASE WHEN ? = 1 THEN ? ELSE approved_by END,
+          approved_at = CASE WHEN ? = 1 THEN ? ELSE approved_at END
+      WHERE id = ?
+    `).run(
+      task.agent_id, officeAgent.name, task.title, task.completion_summary || task.delivery_notes || task.request_summary || null,
+      lane?.name ?? null, task.model_used ?? null, now,
+      autoApproved ? 1 : 0, autoApproved ? 1 : 0, reviewedBy, autoApproved ? 1 : 0, now, autoApproved ? 1 : 0, approvedBy, autoApproved ? 1 : 0, now, existing.id,
+    );
+    return db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(existing.id) ?? null;
+  }
+
   const reportId = createId('report');
   db.prepare(`
-    INSERT INTO office_reports (id, agent_id, agent_name, task_title, completed_at, acknowledged)
-    VALUES (?, ?, ?, ?, ?, 0)
-  `).run(reportId, task.agent_id, officeAgent.name, task.title, Date.now());
+    INSERT INTO office_reports (
+      id, task_id, agent_id, agent_name, task_title, summary, lane_name, model_used,
+      completed_at, acknowledged, review_status, reviewed_by, reviewed_at, approved_by, approved_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+  `).run(
+    reportId, task.id, task.agent_id, officeAgent.name, task.title,
+    task.completion_summary || task.delivery_notes || task.request_summary || null,
+    lane?.name ?? null, task.model_used ?? null, now, reviewStatus, reviewedBy, reviewedBy ? now : null, approvedBy, approvedBy ? now : null,
+  );
+  const report = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(reportId) ?? null;
   officeWss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'report.new',
-        reportId,
-        agentId: task.agent_id,
-        agentName: officeAgent.name,
-        taskTitle: task.title,
-      }));
+      client.send(JSON.stringify({ type: 'report.new', report }));
     }
   });
+  return report;
 }
 
 function recordTaskEvent(taskId: string, eventType: string, actor: string, summary: string, details?: JsonObject) {
@@ -557,7 +641,7 @@ app.get('/api/status', (_req, res) => {
 });
 
 app.post('/api/tasks', (req, res) => {
-  const { title, description, status, agent_id, lane_id, deadline, blocker_reason, promise_date, delivery_notes, request_summary, completion_summary, source, requester } = req.body as Partial<TaskRow>;
+  const { title, description, status, agent_id, lane_id, deadline, blocker_reason, promise_date, delivery_notes, request_summary, completion_summary, progress_summary, next_step, model_used, source, requester } = req.body as Partial<TaskRow>;
   if (!title?.trim()) {
     res.status(400).json({ error: 'Title is required' });
     return;
@@ -570,8 +654,8 @@ app.post('/api/tasks', (req, res) => {
     INSERT INTO tasks (
       id, title, description, status, agent_id, lane_id, deadline, blocker_reason,
       created_at, updated_at, promise_date, delivery_notes, request_summary,
-      completion_summary, source, requester
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      completion_summary, progress_summary, next_step, model_used, source, requester
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     title.trim(),
@@ -587,6 +671,9 @@ app.post('/api/tasks', (req, res) => {
     delivery_notes?.trim() || null,
     request_summary?.trim() || title.trim(),
     completion_summary?.trim() || null,
+    progress_summary?.trim() || null,
+    next_step?.trim() || null,
+    model_used?.trim() || null,
     source?.trim() || 'telegram',
     requester?.trim() || 'Philip',
   );
@@ -625,6 +712,9 @@ app.put('/api/tasks/:id', (req, res) => {
         delivery_notes = ?,
         request_summary = ?,
         completion_summary = ?,
+        progress_summary = ?,
+        next_step = ?,
+        model_used = ?,
         source = ?,
         requester = ?,
         updated_at = ?
@@ -641,6 +731,9 @@ app.put('/api/tasks/:id', (req, res) => {
     Object.prototype.hasOwnProperty.call(payload, 'delivery_notes') ? payload.delivery_notes?.trim() || null : existing.delivery_notes,
     Object.prototype.hasOwnProperty.call(payload, 'request_summary') ? payload.request_summary?.trim() || null : existing.request_summary,
     Object.prototype.hasOwnProperty.call(payload, 'completion_summary') ? payload.completion_summary?.trim() || null : existing.completion_summary,
+    Object.prototype.hasOwnProperty.call(payload, 'progress_summary') ? payload.progress_summary?.trim() || null : existing.progress_summary,
+    Object.prototype.hasOwnProperty.call(payload, 'next_step') ? payload.next_step?.trim() || null : existing.next_step,
+    Object.prototype.hasOwnProperty.call(payload, 'model_used') ? payload.model_used?.trim() || null : existing.model_used,
     Object.prototype.hasOwnProperty.call(payload, 'source') ? payload.source?.trim() || 'telegram' : existing.source,
     Object.prototype.hasOwnProperty.call(payload, 'requester') ? payload.requester?.trim() || 'Philip' : existing.requester,
     now,
@@ -715,7 +808,7 @@ app.post('/api/tasks/:id/move', (req, res) => {
   if (!updated) return;
   syncOfficeAgentForTask(updated);
   if (nextStatus === 'complete') {
-    createOfficeReport(updated);
+    upsertOfficeReport(updated);
   }
   broadcastTask('task_moved', task.id);
   res.json(readTaskDetail(task.id));
@@ -803,7 +896,7 @@ app.post('/api/tasks/:id/approve', (req, res) => {
   const updated = getTaskOr404(res, task.id);
   if (!updated) return;
   syncOfficeAgentForTask(updated);
-  createOfficeReport(updated);
+  upsertOfficeReport(updated, { forceApproved: true, reviewedBy: decidedBy, approvedBy: decidedBy });
   broadcastUpdate({ type: 'task_approved', data: { task: readTaskDetail(task.id), approval } });
   res.json(approval);
 });
@@ -1185,29 +1278,49 @@ app.post('/api/office/agents/:id/move', (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/office/reports', (_req, res) => {
-  const reports = db.prepare<OfficeReportRow>('SELECT * FROM office_reports ORDER BY completed_at DESC').all();
+app.get('/api/office/reports', (req, res) => {
+  const includePending = req.query.includePending === '1';
+  const reports = db.prepare<OfficeReportRow>(`SELECT * FROM office_reports ${includePending ? '' : "WHERE review_status = 'approved'"} ORDER BY completed_at DESC`).all();
   res.json({ reports });
 });
 
 app.post('/api/office/report', (req, res) => {
-  const { agent_id, agent_name, task_title } = req.body as { agent_id?: string; agent_name?: string; task_title?: string };
-  if (!agent_id || !agent_name || !task_title) {
-    res.status(400).json({ error: 'agent_id, agent_name, and task_title are required' });
+  const { task_id } = req.body as { task_id?: string };
+  if (!task_id) {
+    res.status(400).json({ error: 'task_id is required' });
     return;
   }
-  const id = createId('report');
+  const task = getTaskOr404(res, task_id);
+  if (!task) return;
+  const report = upsertOfficeReport(task);
+  res.status(201).json(report);
+});
+
+
+app.post('/api/office/report/:id/approve', (req, res) => {
+  const report = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(req.params.id);
+  if (!report) {
+    res.status(404).json({ error: 'Report not found' });
+    return;
+  }
+  const approver = typeof req.body.approved_by === 'string' ? req.body.approved_by : 'Mildred';
+  const now = Date.now();
   db.prepare(`
-    INSERT INTO office_reports (id, agent_id, agent_name, task_title, completed_at, acknowledged)
-    VALUES (?, ?, ?, ?, ?, 0)
-  `).run(id, agent_id, agent_name, task_title, Date.now());
-  const report = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(id);
+    UPDATE office_reports
+    SET review_status = 'approved',
+        reviewed_by = ?,
+        reviewed_at = ?,
+        approved_by = ?,
+        approved_at = ?
+    WHERE id = ?
+  `).run(approver, now, approver, now, report.id);
+  const updated = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(report.id);
   officeWss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'report.new', reportId: id, agentId: agent_id, agentName: agent_name, taskTitle: task_title }));
+      client.send(JSON.stringify({ type: 'report.updated', report: updated }));
     }
   });
-  res.status(201).json(report);
+  res.json(updated);
 });
 
 app.post('/api/office/report/:id/acknowledge', (req, res) => {

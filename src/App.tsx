@@ -14,7 +14,7 @@ const STATUSES = [
 
 type StatusId = (typeof STATUSES)[number]['id'];
 
-type ViewMode = 'dashboard' | 'board' | 'office';
+type ViewMode = 'office' | 'dashboard' | 'board';
 
 interface Agent {
   id: string;
@@ -47,6 +47,9 @@ interface Task {
   delivery_notes: string | null;
   request_summary: string | null;
   completion_summary: string | null;
+  progress_summary: string | null;
+  next_step: string | null;
+  model_used: string | null;
   source: string | null;
   requester: string | null;
   agent_name?: string | null;
@@ -99,6 +102,7 @@ interface TaskDetail extends Task {
   evidence: Evidence[];
   approvals: Approval[];
   prs: PRTracking[];
+  office_report?: { review_status: string; reviewed_by: string | null; approved_by: string | null; approved_at: number | null; model_used: string | null } | null;
   history: TaskHistoryEvent[];
 }
 
@@ -147,6 +151,9 @@ interface TaskDraft {
   promise_date: string;
   blocker_reason: string;
   completion_summary: string;
+  progress_summary: string;
+  next_step: string;
+  model_used: string;
   delivery_notes: string;
   source: string;
   requester: string;
@@ -163,6 +170,9 @@ const EMPTY_DRAFT: TaskDraft = {
   promise_date: '',
   blocker_reason: '',
   completion_summary: '',
+  progress_summary: '',
+  next_step: '',
+  model_used: '',
   delivery_notes: '',
   source: 'telegram',
   requester: 'Philip',
@@ -189,7 +199,7 @@ function App() {
   const [status, setStatus] = useState<StatusResponse>({ gateway_connected: 0, last_update: 0 });
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [costSummary, setCostSummary] = useState<TaskCostSummary>({ totals: { tokens: 0, estimated: 0, actual: 0 } });
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
+  const [viewMode, setViewMode] = useState<ViewMode>('office');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedLane, setSelectedLane] = useState('all');
   const [connected, setConnected] = useState(false);
@@ -298,6 +308,9 @@ function App() {
       promise_date: detail.promise_date || '',
       blocker_reason: detail.blocker_reason || '',
       completion_summary: detail.completion_summary || '',
+      progress_summary: detail.progress_summary || '',
+      next_step: detail.next_step || '',
+      model_used: detail.model_used || '',
       delivery_notes: detail.delivery_notes || '',
       source: detail.source || 'telegram',
       requester: detail.requester || 'Philip',
@@ -334,6 +347,9 @@ function App() {
       blocker_reason: taskDraft.blocker_reason || null,
       promise_date: taskDraft.promise_date || null,
       completion_summary: taskDraft.completion_summary || null,
+      progress_summary: taskDraft.progress_summary || null,
+      next_step: taskDraft.next_step || null,
+      model_used: taskDraft.model_used || null,
       delivery_notes: taskDraft.delivery_notes || null,
       request_summary: taskDraft.request_summary || taskDraft.title,
     };
@@ -449,7 +465,7 @@ function App() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex rounded-xl border border-slate-800 bg-slate-900 p-1 text-sm">
-              {(['dashboard', 'board', 'office'] as ViewMode[]).map((mode) => (
+              {(['office', 'dashboard', 'board'] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -861,6 +877,15 @@ function TaskComposer({
           <Field label="Blocker / waiting reason" className="md:col-span-2">
             <textarea value={draft.blocker_reason} onChange={(event) => setDraft((prev) => ({ ...prev, blocker_reason: event.target.value }))} className="field min-h-20" placeholder="Waiting for CI, approval, or external input" />
           </Field>
+          <Field label="Progress so far" className="md:col-span-2">
+            <textarea value={draft.progress_summary} onChange={(event) => setDraft((prev) => ({ ...prev, progress_summary: event.target.value }))} className="field min-h-24" placeholder="Plain-English update on what has been done so far." />
+          </Field>
+          <Field label="Next step or ETA">
+            <input value={draft.next_step} onChange={(event) => setDraft((prev) => ({ ...prev, next_step: event.target.value }))} className="field" placeholder="Finish review notes by 3pm" />
+          </Field>
+          <Field label="Model being used">
+            <input value={draft.model_used} onChange={(event) => setDraft((prev) => ({ ...prev, model_used: event.target.value }))} className="field" placeholder="MiniMax M2.5" />
+          </Field>
           <Field label="Completion summary" className="md:col-span-2">
             <textarea value={draft.completion_summary} onChange={(event) => setDraft((prev) => ({ ...prev, completion_summary: event.target.value }))} className="field min-h-24" placeholder="Readable wrap-up for Philip once work is done." />
           </Field>
@@ -964,6 +989,8 @@ function TaskDetailDrawer({
             <InfoCard label="Promised date" value={task.promise_date || 'Not set'} />
             <InfoCard label="Last updated" value={formatDateTime(task.updated_at)} />
             <InfoCard label="Deadline" value={formatShortDate(task.deadline)} />
+            <InfoCard label="Model used" value={task.model_used || 'Not recorded'} />
+            <InfoCard label="Report status" value={task.office_report?.review_status === 'approved' ? 'Approved by Mildred' : task.status === 'complete' ? 'Waiting for Mildred review' : 'Not ready yet'} />
           </section>
 
           <section className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
@@ -990,6 +1017,9 @@ function TaskDetailDrawer({
           <section className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
             <Panel title="Readable completion report">
               <div className="space-y-4 text-sm text-slate-300">
+                <DetailBlock title="Short summary" body={task.request_summary || task.description || 'No request summary yet.'} />
+                <DetailBlock title="Progress so far" body={task.progress_summary || 'No progress update yet.'} />
+                <DetailBlock title="Next step or ETA" body={task.next_step || 'No next step recorded.'} />
                 <DetailBlock title="Completion summary" body={task.completion_summary || 'No completion summary yet.'} />
                 <DetailBlock title="Delivery notes" body={task.delivery_notes || 'No delivery notes attached.'} />
                 <DetailBlock title="Execution notes" body={task.description || 'No internal execution notes.'} />

@@ -53,3 +53,253 @@ select {
 a {
   color: inherit;
 }
+
+/* ============================================
+   MISSION CONTROL POLISH LAYER
+   Life animations for the office
+   ============================================ */
+
+/* 1. AVATAR BREATHING ANIMATION
+   3.5s ease-in-out infinite, 1px vertical bob
+   Subtle, barely perceptible life signal */
+@keyframes avatar-breathe {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+.avatar-breathing {
+  animation: avatar-breathe 3.5s ease-in-out infinite;
+}
+
+/* 2. SHADOW SYSTEM
+   x=4px, y=6px, #1a1a2e at 15% opacity, 8-12px blur
+   Grounds avatars and desks to the floor */
+.avatar-shadow {
+  box-shadow: 4px 6px 12px rgba(26, 26, 46, 0.15);
+}
+
+.desk-shadow {
+  box-shadow: 4px 6px 10px rgba(26, 26, 46, 0.15);
+}
+
+.tray-shadow {
+  box-shadow: 4px 6px 8px rgba(26, 26, 46, 0.15);
+}
+
+/* 3. BADGE APPEARANCE ANIMATION
+   scale 0→1.1→1, 300ms ease-back, single pulse on arrival
+   Attention without aggression */
+@keyframes badge-arrive {
+  0% {
+    transform: scale(0);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.badge-arrival {
+  animation: badge-arrive 300ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* Blocked badge gentle pulse (ongoing attention) */
+@keyframes badge-pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.badge-pulse {
+  animation: badge-pulse 2s ease-in-out infinite;
+}
+
+/* 4. HOVER STATES
+   Desks: brightness(1.05)
+   Avatars: scale(1.05) + brightness(1.1) */
+.desk-hover:hover {
+  filter: brightness(1.05);
+}
+
+.avatar-hover {
+  transition: transform 0.2s ease, filter 0.2s ease;
+}
+
+.avatar-hover:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+}
+
+/* 5. REPORTS TRAY BEHAVIOR
+   Anticipation glow, arrival animation, populated states */
+
+/* Anticipation glow - subtle pulse when reports pending */
+@keyframes tray-anticipation {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+  }
+  50% {
+    box-shadow: 0 0 20px 4px rgba(251, 191, 36, 0.15);
+  }
+}
+
+.tray-anticipation {
+  animation: tray-anticipation 2s ease-in-out infinite;
+}
+
+/* Arrival animation for new reports */
+@keyframes tray-arrive {
+  0% {
+    transform: translateY(-10px);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.tray-arrival {
+  animation: tray-arrive 400ms ease-out forwards;
+}
+
+/* Populated state - subtle warm glow */
+.tray-populated {
+  filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.2));
+}
+
+/* 6. DESK GLOW STATES
+   Working: emerald glow
+   Blocked: amber glow
+   Inactive: subtle ambient */
+@keyframes desk-glow-working {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4));
+  }
+}
+
+@keyframes desk-glow-blocked {
+  0%, 100% {
+    filter: drop-shadow(0 0 6px rgba(251, 191, 36, 0.25));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.35));
+  }
+}
+
+.desk-glow-working {
+  animation: desk-glow-working 3s ease-in-out infinite;
+}
+
+.desk-glow-blocked {
+  animation: desk-glow-blocked 3s ease-in-out infinite;
+}
+
+/* PROGRESS BAR ANIMATION
+   Smooth width transitions */
+.progress-bar {
+  transition: width 0.5s ease-out;
+}
+
+/* MOVEMENT TRANSITIONS
+   For agent enter/exit */
+.movement-transition {
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+/* STATE CHANGE FLASH
+   Subtle flash on state change */
+@keyframes state-flash {
+  0% {
+    filter: brightness(1);
+  }
+  50% {
+    filter: brightness(1.2);
+  }
+  100% {
+    filter: brightness(1);
+  }
+}
+
+.state-change {
+  animation: state-flash 0.4s ease-out;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   Desktop-first with tablet/mobile fallbacks
+   ============================================ */
+
+/* Tablet adjustments (1024px and below) */
+@media (max-width: 1024px) {
+  .office-scene-container {
+    transform: scale(0.85);
+    transform-origin: top center;
+  }
+}
+
+/* Mobile adjustments (768px and below) */
+@media (max-width: 768px) {
+  .office-scene-container {
+    transform: scale(0.65);
+    transform-origin: top left;
+  }
+  
+  /* Ensure desk labels remain readable */
+  .desk-label {
+    font-size: 10px;
+  }
+  
+  /* Adjust click regions for touch */
+  .click-region {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  /* Remove hover effects on touch devices */
+  .desk-hover:hover,
+  .avatar-hover:hover {
+    filter: none;
+    transform: none;
+  }
+  
+  /* Ensure active states are visible */
+  .desk-active:active,
+  .avatar-active:active {
+    filter: brightness(1.1);
+    transform: scale(0.98);
+  }
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .avatar-breathing,
+  .badge-pulse,
+  .tray-anticipation,
+  .desk-glow-working,
+  .desk-glow-blocked {
+    animation: none;
+  }
+  
+  .progress-bar {
+    transition: none;
+  }
+}
