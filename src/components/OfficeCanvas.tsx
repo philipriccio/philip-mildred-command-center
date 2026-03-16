@@ -42,10 +42,10 @@ const AVATAR_ASSETS: Record<string, string> = {
 };
 
 const AVATAR_OFFSETS: Record<string, { left: number; top: number; width: number; height: number }> = {
-  mildred: { left: 80, top: 10, width: 120, height: 120 },
-  dev: { left: 80, top: 10, width: 120, height: 120 },
-  research: { left: 80, top: 10, width: 120, height: 120 },
-  content: { left: 80, top: 10, width: 120, height: 120 },
+  mildred: { left: 33, top: -70, width: 220, height: 220 },
+  dev: { left: 43, top: -60, width: 200, height: 200 },
+  research: { left: 33, top: -65, width: 220, height: 220 },
+  content: { left: 43, top: -60, width: 200, height: 200 },
 };
 
 export interface OfficeCanvasHandle {
@@ -178,39 +178,19 @@ function DeskStage({ desk, onSelectAgent }: { desk: OfficeDesk; onSelectAgent: (
         aria-label={`${desk.label} desk ${desk.agent.name} ${desk.agent.taskTitle || stateLabel(desk.agent.state)}`}
         tabIndex={clickable ? 0 : -1}
       >
-        {/* Shadow system: x=4px, y=6px, #1a1a2e at 15% opacity, 8-12px blur */}
-        <div
-          className="absolute rounded-full"
-          style={{
-            bottom: '10px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            width: '78%',
-            height: '26px',
-            boxShadow: '4px 6px 12px rgba(26, 26, 46, 0.15)',
-          }}
-        />
-
-        {/* Desk with hover state: brightness(1.05) */}
-        <img
-          src={deskAsset}
-          alt=""
-          className={`absolute left-0 top-0 object-contain [image-rendering:pixelated] transition-all duration-200 ${clickable ? 'group-hover:brightness-105' : ''} ${glowClass}`}
-          style={{ width: config.sprite.width * config.stage.scale, height: config.sprite.height * config.stage.scale }}
-        />
+        {/* No desk sprite — desks are baked into the master background scene */}
 
         {/* Avatar with breathing animation and hover state */}
         {avatarAsset && desk.agent.state !== 'inactive' && desk.agent.state !== 'reserved' && (
           <img
             src={avatarAsset}
             alt=""
-            className={`pointer-events-none absolute object-cover [image-rendering:pixelated] avatar-breathing ${clickable ? 'group-hover:brightness-110' : ''}`}
+            className={`pointer-events-none absolute object-contain [image-rendering:pixelated] avatar-breathing ${clickable ? 'group-hover:brightness-110' : ''}`}
             style={{
               left: avatarOffset.left * config.stage.scale,
               top: avatarOffset.top * config.stage.scale,
               width: avatarOffset.width * config.stage.scale,
               height: avatarOffset.height * config.stage.scale,
-              borderRadius: '50%',
             }}
           />
         )}

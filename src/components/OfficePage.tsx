@@ -80,7 +80,7 @@ const DESK_LAYOUT = OFFICE_SCENE_DESK_ORDER.map((id) => ({
 const FALLBACK_AGENTS: OfficeAgent[] = [
   { id: 'mildred', name: 'Mildred', position_x: 0, position_y: 0, state: 'blocked', current_task: 'Waiting on approval', task_progress: 58, color: '#008080', office_enabled: 1 },
   { id: 'dev', name: 'Dev', position_x: 0, position_y: 0, state: 'working', current_task: 'Implement office master scene', task_progress: 76, color: '#808080', office_enabled: 1 },
-  { id: 'research', name: 'Claire', position_x: 0, position_y: 0, state: 'inactive', current_task: null, task_progress: 0, color: '#8B4513', office_enabled: 1 },
+  { id: 'research', name: 'Claire', position_x: 0, position_y: 0, state: 'working', current_task: 'Mission Control visual design', task_progress: 45, color: '#8B4513', office_enabled: 1 },
   { id: 'content', name: 'Future', position_x: 0, position_y: 0, state: 'reserved', current_task: null, task_progress: 0, color: '#7c6f4f', office_enabled: 1 },
 ];
 
@@ -175,10 +175,9 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       };
       
       if (!prev) {
-        // First time seeing this agent - enter if active
-        if (agent.state !== 'inactive' && agent.state !== 'offline') {
-          changes.push({ agentId: agent.id, type: 'enter', timestamp: Date.now() });
-        }
+        // First time seeing this agent - just record state, no animation on initial load
+        agentStateHistory.current.set(agent.id, current);
+        continue;
       } else {
         // State transition detection
         const wasActive = prev.state !== 'inactive' && prev.state !== 'offline';
