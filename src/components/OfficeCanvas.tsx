@@ -3,12 +3,14 @@ import blockedBadgeAsset from '../../assets/generated/blocked-badge-v2.png';
 import deskEmptyAsset from '../../assets/generated/desk-empty-v1.png';
 import deskIdleAsset from '../../assets/generated/desk-idle-v1.png';
 import deskWorkingAsset from '../../assets/generated/desk-working-v1.png';
-import devAvatarAsset from '../../assets/generated/dev-avatar-severance-v2.png';
-import mildredAvatarAsset from '../../assets/generated/mildred-avatar-severance-v1.png';
-import officeMasterSceneAsset from '../../assets/generated/office-master-scene-v2-refined-d-v4.png';
 import reportsTrayAsset from '../../assets/generated/reports-tray-v1.png';
-import researchAvatarAsset from '../../assets/generated/research-avatar-severance-v1.png';
-import contentAvatarAsset from '../../assets/generated/content-avatar-severance-v1.png';
+
+// Pixel art sprites (served from public/sprites/)
+const devAvatarAsset = '/sprites/sprite-dev.png';
+const mildredAvatarAsset = '/sprites/sprite-mildred.png';
+const officeMasterSceneAsset = '/sprites/office-background.png';
+const researchAvatarAsset = '/sprites/sprite-claire.png';
+const contentAvatarAsset = '/sprites/sprite-future.png';
 import { OFFICE_SCENE_CONFIG, OFFICE_SCENE_SIZE, type OfficeSceneDeskId } from '../officeSceneConfig';
 import { MovingAgent, useAgentMovement } from './AgentMovement';
 
@@ -42,10 +44,10 @@ const AVATAR_ASSETS: Record<string, string> = {
 };
 
 const AVATAR_OFFSETS: Record<string, { left: number; top: number; width: number; height: number }> = {
-  mildred: { left: 33, top: -70, width: 220, height: 220 },
-  dev: { left: 43, top: -60, width: 200, height: 200 },
-  research: { left: 33, top: -65, width: 220, height: 220 },
-  content: { left: 43, top: -60, width: 200, height: 200 },
+  mildred: { left: 20, top: -90, width: 160, height: 160 },
+  dev: { left: 20, top: -90, width: 160, height: 160 },
+  research: { left: 20, top: -90, width: 160, height: 160 },
+  content: { left: 20, top: -90, width: 160, height: 160 },
 };
 
 export interface OfficeCanvasHandle {
