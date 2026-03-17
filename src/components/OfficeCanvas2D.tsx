@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export interface OfficeAgent {
   id: string;
@@ -566,12 +566,60 @@ function lighten(hex: string): string {
   return `rgb(${r},${g},${b})`;
 }
 
+// ─── Demo mode agents (used when no real agents provided) ─────────────────────
+const DEMO_AGENTS: OfficeAgent[] = [
+  { id: 'mildred', name: 'Mildred', state: 'working', taskTitle: 'Running the show', color: '#008080' },
+  { id: 'dev',     name: 'Dev',     state: 'idle',    taskTitle: null,               color: '#3b82f6' },
+  { id: 'claire',  name: 'Claire',  state: 'idle',    taskTitle: null,               color: '#9f1239' },
+  { id: 'future',  name: 'Future',  state: 'reserved', taskTitle: null,              color: '#6b7280' },
+];
+
+// Automated demo scenario: cycles agents through states every few seconds
+const DEMO_SCRIPT: Array<{ delay: number; agentId: string; state: OfficeAgent['state'] }> = [
+  { delay: 1000,  agentId: 'mildred', state: 'working' },
+  { delay: 3000,  agentId: 'dev',     state: 'working' },
+  { delay: 5000,  agentId: 'claire',  state: 'working' },
+  { delay: 10000, agentId: 'dev',     state: 'blocked' },
+  { delay: 15000, agentId: 'claire',  state: 'idle' },
+  { delay: 20000, agentId: 'dev',     state: 'working' },
+  { delay: 25000, agentId: 'mildred', state: 'finished' },
+  { delay: 30000, agentId: 'dev',     state: 'finished' },
+  { delay: 35000, agentId: 'mildred', state: 'working' },
+  { delay: 38000, agentId: 'dev',     state: 'working' },
+];
+
 // ─── Component ────────────────────────────────────────────────────────────────
-export function OfficeCanvas2D({ agents, onSelectAgent }: OfficeCanvas2DProps) {
+export function OfficeCanvas2D({ agents: propAgents, onSelectAgent }: OfficeCanvas2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const runtimeRef = useRef<AgentRuntime[]>([]);
   const rafRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
+  const [demoAgents, setDemoAgents] = useState<OfficeAgent[]>(DEMO_AGENTS);
+  const demoTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Use real agents if available, otherwise demo agents
+  const agents = propAgents.length > 0 ? propAgents : demoAgents;
+
+  // Start demo auto-cycle when using demo agents
+  useEffect(() => {
+    if (propAgents.length > 0) return; // skip if real agents
+
+    let step = 0;
+    function runStep() {
+      if (step >= DEMO_SCRIPT.length) {
+        step = 0; // loop
+      }
+      const { agentId, state, delay } = DEMO_SCRIPT[step];
+      const t = setTimeout(() => {
+        setDemoAgents(prev => prev.map(a => a.id === agentId ? { ...a, state } : a));
+        step++;
+        runStep();
+      }, delay);
+      demoTimersRef.current.push(t);
+    }
+    runStep();
+    return () => demoTimersRef.current.forEach(clearTimeout);
+  }, [propAgents.length]);
 
   // Initialise runtime on first render
   useEffect(() => {
@@ -653,16 +701,50 @@ export function OfficeCanvas2D({ agents, onSelectAgent }: OfficeCanvas2DProps) {
     }
   }
 
+  function setAgentState(agentId: string, state: OfficeAgent['state']) {
+    setDemoAgents(prev => prev.map(a => a.id === agentId ? { ...a, state } : a));
+  }
+
+  const btnBase = 'rounded px-2.5 py-1 text-[10px] font-mono font-bold transition-colors';
+
   return (
-    <div className="overflow-x-auto">
-      <canvas
-        ref={canvasRef}
-        width={W}
-        height={H}
-        onClick={handleClick}
-        className="cursor-pointer rounded-2xl border border-[#1e293b]"
-        style={{ display: 'block', imageRendering: 'pixelated' }}
-      />
+    <div className="space-y-3">
+      {/* Demo controls — shown when no real agents are connected */}
+      {propAgents.length === 0 && (
+        <div className="rounded-xl border border-[#1e293b] bg-[#0a0f1e] p-3">
+          <p className="mb-2 text-[10px] font-mono text-[#475569] uppercase tracking-widest">Demo controls — auto-cycling · click to override</p>
+          <div className="flex flex-wrap gap-2">
+            {demoAgents.map(a => (
+              <div key={a.id} className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: a.color }} />
+                <span className="text-[10px] font-mono text-[#94a3b8] mr-1">{a.name}</span>
+                {(['working','blocked','idle','finished'] as OfficeAgent['state'][]).map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setAgentState(a.id, s)}
+                    className={`${btnBase} ${a.state === s
+                      ? 'bg-[#1e3a5f] text-[#60a5fa] border border-[#2563eb]'
+                      : 'bg-[#0f172a] text-[#475569] border border-[#1e293b] hover:text-[#94a3b8]'}`}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="overflow-x-auto">
+        <canvas
+          ref={canvasRef}
+          width={W}
+          height={H}
+          onClick={handleClick}
+          className="cursor-pointer rounded-2xl border border-[#1e293b]"
+          style={{ display: 'block', imageRendering: 'pixelated' }}
+        />
+      </div>
     </div>
   );
 }
