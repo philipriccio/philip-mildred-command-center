@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OFFICE_SCENE_CONFIG, OFFICE_SCENE_DESK_ORDER } from '../officeSceneConfig';
-import { OfficeCanvas, type OfficeCanvasHandle } from './OfficeCanvas';
+import { OfficeCanvas, type OfficeCanvasHandle } from './OfficeCanvas'; // kept for reference
+import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
 import { ReportsPanel } from './ReportsPanel';
 
 // Agent state tracking for movement animations
@@ -453,8 +454,20 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         </div>
       </div>
 
+      {/* New 2D pixel art game canvas */}
       <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
-        <OfficeCanvas ref={canvasRef} desks={desks} onSelectAgent={(agentId) => void openAgentDetail(agentId)} />
+        <OfficeCanvas2D
+          agents={agents.map((a): OfficeAgent2D => ({
+            id: a.id,
+            name: a.name,
+            state: (['working','blocked','idle','offline','finished','reserved'].includes(a.state)
+              ? a.state
+              : 'idle') as OfficeAgent2D['state'],
+            taskTitle: a.current_task,
+            color: a.color,
+          }))}
+          onSelectAgent={(agentId) => void openAgentDetail(agentId)}
+        />
       </div>
 
       <ReportsPanel
