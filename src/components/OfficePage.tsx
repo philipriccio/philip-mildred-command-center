@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { OFFICE_SCENE_CONFIG, OFFICE_SCENE_DESK_ORDER } from '../officeSceneConfig';
+// officeSceneConfig no longer used — 2D canvas has its own desk layout
 import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
 import { AgentDetailDrawer } from './AgentDetailDrawer';
 import { ReportsPanel } from './ReportsPanel';
@@ -73,13 +73,6 @@ interface ActivityEntry {
   tool: string | null;
   summary: string;
 }
-
-const DESK_LAYOUT = OFFICE_SCENE_DESK_ORDER.map((id) => ({
-  id,
-  label: OFFICE_SCENE_CONFIG.desks[id].label,
-  x: OFFICE_SCENE_CONFIG.desks[id].stage.left,
-  y: OFFICE_SCENE_CONFIG.desks[id].stage.top,
-}));
 
 const FALLBACK_AGENTS: OfficeAgent[] = [
   { id: 'main', name: 'Mildred', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#008080', office_enabled: 1 },
@@ -294,43 +287,6 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
     }
     return map;
   }, [tasks]);
-
-  const desks = useMemo(() => {
-    return DESK_LAYOUT.map((desk) => {
-      const officeAgent = agents.find((agent) => agent.id === desk.id);
-      const task = taskByAgent.get(desk.id);
-      const hasPending = pendingReports.some((report) => report.agent_id === desk.id);
-      const state: 'working' | 'blocked' | 'inactive' | 'finished' | 'reserved' =
-        task?.status === 'complete'
-          ? 'finished'
-          : task?.blocker_reason
-            ? 'blocked'
-            : task && ['ready', 'in_progress', 'verification'].includes(task.status)
-              ? 'working'
-              : hasPending
-                ? 'finished'
-                : 'inactive';
-
-      return {
-        id: desk.id,
-        label: desk.label,
-        color: officeAgent?.color || '#64748b',
-        x: desk.x,
-        y: desk.y,
-        agent: {
-          id: desk.id,
-          name: desk.label,
-          color: officeAgent?.color || '#64748b',
-          state,
-          taskTitle: state === 'finished' ? null : task?.title || null,
-          progress: officeAgent?.task_progress || (state === 'blocked' ? 55 : state === 'working' ? 35 : 0),
-          summary: task?.progress_summary || task?.request_summary || null,
-          blocker: task?.blocker_reason || null,
-          isClickable: Boolean(task),
-        },
-      };
-    });
-  }, [agents, pendingReports, taskByAgent]);
 
   const activeCount = agents.filter((a) => a.state === 'working').length;
   const blockedCount = agents.filter((a) => a.state === 'blocked').length;

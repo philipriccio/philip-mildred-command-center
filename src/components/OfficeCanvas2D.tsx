@@ -118,7 +118,7 @@ function makeRuntime(agent: OfficeAgent): AgentRuntime {
 
 function stateToPhase(state: OfficeAgent['state']): AgentPhase {
   if (state === 'working' || state === 'blocked') return 'entering';
-  if (state === 'idle') return 'wandering';
+  if (state === 'idle') return 'sitting';   // idle = at desk, available
   if (state === 'finished') return 'exiting';
   return 'gone';
 }

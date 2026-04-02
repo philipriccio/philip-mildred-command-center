@@ -6,6 +6,7 @@ import { SiteHealthPanel } from './components/SiteHealthPanel';
 import { SessionsPanel } from './components/SessionsPanel';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { QuickCommand } from './components/QuickCommand';
+import { CostTracker } from './components/CostTracker';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001';
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
@@ -517,6 +518,7 @@ function App() {
               <QuickCommand apiBase={API_BASE} />
               <ActivityTimeline wsUrl={`${WS_BASE}/ws`} />
             </section>
+            <CostTracker apiBase={API_BASE} />
 
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <StatCard label="Active work" value={activeTasks.length} accent="text-blue-300" />
