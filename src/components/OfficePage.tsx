@@ -1,20 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OFFICE_SCENE_CONFIG, OFFICE_SCENE_DESK_ORDER } from '../officeSceneConfig';
-import { OfficeCanvas, type OfficeCanvasHandle } from './OfficeCanvas'; // kept for reference
 import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
 import { ReportsPanel } from './ReportsPanel';
 
-// Agent state tracking for movement animations
 type AgentStateSnapshot = {
   state: string;
   current_task: string | null;
   lastSeen: number;
-};
-
-type MovementTrigger = {
-  agentId: string;
-  type: 'enter' | 'exit';
-  timestamp: number;
 };
 
 interface OfficeAgent {
@@ -71,6 +63,16 @@ interface TaskDetail extends Task {
   history: Array<{ id: string; summary: string; actor: string; created_at: number }>;
 }
 
+interface ActivityEntry {
+  id: string;
+  timestamp: number;
+  agentId: string;
+  agentName: string;
+  eventType: 'thinking' | 'tool_call' | 'speaking' | 'idle' | 'error';
+  tool: string | null;
+  summary: string;
+}
+
 const DESK_LAYOUT = OFFICE_SCENE_DESK_ORDER.map((id) => ({
   id,
   label: OFFICE_SCENE_CONFIG.desks[id].label,
@@ -123,149 +125,154 @@ const FALLBACK_TASKS: Task[] = [
   },
 ];
 
+function formatRelativeTime(timestamp: number, now: number) {
+  const diff = Math.max(0, now - timestamp);
+  const minute = 60_000;
+  const hour = 60 * minute;
+  if (diff < 15_000) return 'just now';
+  if (diff < hour) return `${Math.max(1, Math.round(diff / minute))}m ago`;
+  if (diff < 24 * hour) return `${Math.max(1, Math.round(diff / hour))}h ago`;
+  return `${Math.max(1, Math.round(diff / (24 * hour)))}d ago`;
+}
+
+function activityLabel(entry: ActivityEntry) {
+  switch (entry.eventType) {
+    case 'thinking':
+      return 'Thinking...';
+    case 'tool_call':
+      return entry.tool ? `Running ${entry.tool}` : 'Running tool';
+    case 'speaking':
+      return entry.summary || 'Responding';
+    case 'idle':
+      return 'Idle';
+    case 'error':
+      return entry.summary || 'Error';
+    default:
+      return entry.summary;
+  }
+}
+
 export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string }) {
   const [reports, setReports] = useState<OfficeReport[]>([]);
   const [pendingReports, setPendingReports] = useState<OfficeReport[]>([]);
   const [agents, setAgents] = useState<OfficeAgent[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<TaskDetail | null>(null);
   const [usingFallbackData, setUsingFallbackData] = useState(false);
-  const canvasRef = useRef<OfficeCanvasHandle>(null);
-  
-  // Agent state tracking for automatic movement triggers
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
   const agentStateHistory = useRef<Map<string, AgentStateSnapshot>>(new Map());
-  const [movementQueue, setMovementQueue] = useState<MovementTrigger[]>([]);
-  const processingMovement = useRef(false);
 
-  // Process movement queue sequentially
   useEffect(() => {
-    if (processingMovement.current || movementQueue.length === 0) return;
-    
-    const processNext = async () => {
-      processingMovement.current = true;
-      const trigger = movementQueue[0];
-      
-      if (canvasRef.current) {
-        if (trigger.type === 'enter') {
-          canvasRef.current.startAgentEnter(trigger.agentId, trigger.agentId);
-        } else {
-          canvasRef.current.startAgentExit(trigger.agentId, trigger.agentId);
-        }
-        // Wait for animation to complete (~2.5s total)
-        await new Promise(resolve => setTimeout(resolve, 3000));
-      }
-      
-      setMovementQueue(prev => prev.slice(1));
-      processingMovement.current = false;
-    };
-    
-    processNext();
-  }, [movementQueue]);
+    const interval = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
-  // Detect agent state changes and queue movements
-  const detectStateChanges = (newAgents: OfficeAgent[]) => {
-    const changes: MovementTrigger[] = [];
-    
-    for (const agent of newAgents) {
-      const prev = agentStateHistory.current.get(agent.id);
-      const current: AgentStateSnapshot = {
-        state: agent.state,
-        current_task: agent.current_task,
-        lastSeen: Date.now(),
-      };
-      
-      if (!prev) {
-        // First time seeing this agent - just record state, no animation on initial load
-        agentStateHistory.current.set(agent.id, current);
-        continue;
-      } else {
-        // State transition detection
-        const wasActive = prev.state !== 'inactive' && prev.state !== 'offline';
-        const isActive = agent.state !== 'inactive' && agent.state !== 'offline';
-        
-        if (!wasActive && isActive) {
-          // Agent became active - enter
-          changes.push({ agentId: agent.id, type: 'enter', timestamp: Date.now() });
-        } else if (wasActive && !isActive) {
-          // Agent became inactive - exit
-          changes.push({ agentId: agent.id, type: 'exit', timestamp: Date.now() });
-        }
+  const fetchAll = async () => {
+    try {
+      const [agentsRes, reportsRes, pendingRes, tasksRes, activityRes] = await Promise.all([
+        fetch(`${apiBase}/api/office/agents`),
+        fetch(`${apiBase}/api/office/reports`),
+        fetch(`${apiBase}/api/office/reports?includePending=1`),
+        fetch(`${apiBase}/api/tasks`),
+        fetch(`${apiBase}/api/activity/recent`),
+      ]);
+
+      const approvedPayload = await reportsRes.json() as { reports?: OfficeReport[] };
+      const allPayload = await pendingRes.json() as { reports?: OfficeReport[] };
+      const agentPayload = await agentsRes.json() as { agents?: OfficeAgent[] };
+      const activityPayload = await activityRes.json() as { entries?: ActivityEntry[] };
+      const newAgents = agentPayload.agents || [];
+
+      for (const agent of newAgents) {
+        agentStateHistory.current.set(agent.id, {
+          state: agent.state,
+          current_task: agent.current_task,
+          lastSeen: Date.now(),
+        });
       }
-      
-      agentStateHistory.current.set(agent.id, current);
-    }
-    
-    if (changes.length > 0) {
-      setMovementQueue(prev => [...prev, ...changes]);
+
+      setAgents(newAgents);
+      setReports(approvedPayload.reports || []);
+      setPendingReports((allPayload.reports || []).filter((report) => report.review_status !== 'approved'));
+      setTasks(await tasksRes.json());
+      setActivity((activityPayload.entries || []).slice(-50));
+      setUsingFallbackData(false);
+    } catch (error) {
+      console.error(error);
+      setAgents(FALLBACK_AGENTS);
+      setReports([]);
+      setPendingReports([]);
+      setTasks(FALLBACK_TASKS);
+      setActivity([]);
+      setUsingFallbackData(true);
     }
   };
 
   useEffect(() => {
-    const fetchAll = async () => {
-      try {
-        const [agentsRes, reportsRes, pendingRes, tasksRes] = await Promise.all([
-          fetch(`${apiBase}/api/office/agents`),
-          fetch(`${apiBase}/api/office/reports`),
-          fetch(`${apiBase}/api/office/reports?includePending=1`),
-          fetch(`${apiBase}/api/tasks`),
-        ]);
-
-        const approvedPayload = await reportsRes.json() as { reports?: OfficeReport[] };
-        const allPayload = await pendingRes.json() as { reports?: OfficeReport[] };
-        const newAgents = (await agentsRes.json()).agents || [];
-        
-        // Detect state changes for movement animations
-        detectStateChanges(newAgents);
-        
-        setAgents(newAgents);
-        setReports(approvedPayload.reports || []);
-        setPendingReports((allPayload.reports || []).filter((report) => report.review_status !== 'approved'));
-        setTasks(await tasksRes.json());
-        setUsingFallbackData(false);
-      } catch (error) {
-        console.error(error);
-        setAgents(FALLBACK_AGENTS);
-        setReports([]);
-        setPendingReports([]);
-        setTasks(FALLBACK_TASKS);
-        setUsingFallbackData(true);
-      }
-    };
-
     fetchAll().catch(console.error);
 
     const ws = new WebSocket(wsUrl);
-    ws.onopen = () => setConnected(true);
+    ws.onopen = () => {
+      setConnected(true);
+      ws.send(JSON.stringify({ type: 'subscribe', topics: ['office', 'gateway', 'activity'] }));
+    };
     ws.onclose = () => setConnected(false);
     ws.onmessage = (event) => {
-      // Handle specific WebSocket message types
       try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'agent.state' && data.agentId && data.state) {
-          // Real-time state change - trigger movement if needed
-          const prev = agentStateHistory.current.get(data.agentId);
-          const wasActive = prev && prev.state !== 'inactive' && prev.state !== 'offline';
-          const isActive = data.state !== 'inactive' && data.state !== 'offline';
-          
-          if (!wasActive && isActive) {
-            setMovementQueue(prev => [...prev, { agentId: data.agentId, type: 'enter', timestamp: Date.now() }]);
-          } else if (wasActive && !isActive) {
-            setMovementQueue(prev => [...prev, { agentId: data.agentId, type: 'exit', timestamp: Date.now() }]);
+        const data = JSON.parse(event.data) as Record<string, unknown>;
+
+        if (data.type === 'office.init' && Array.isArray(data.agents)) {
+          const nextAgents = data.agents as OfficeAgent[];
+          for (const agent of nextAgents) {
+            agentStateHistory.current.set(agent.id, {
+              state: agent.state,
+              current_task: agent.current_task,
+              lastSeen: Date.now(),
+            });
           }
-          
+          setAgents(nextAgents);
+          return;
+        }
+
+        if (data.type === 'agent.state' && typeof data.agentId === 'string') {
+          setAgents((prev) => prev.map((agent) => agent.id === data.agentId ? {
+            ...agent,
+            state: typeof data.state === 'string' ? data.state : agent.state,
+            current_task: typeof data.task === 'string' ? data.task : data.task === null ? null : agent.current_task,
+            task_progress: typeof data.progress === 'number' ? data.progress : agent.task_progress,
+          } : agent));
           agentStateHistory.current.set(data.agentId, {
-            state: data.state,
-            current_task: data.task || null,
+            state: typeof data.state === 'string' ? data.state : 'idle',
+            current_task: typeof data.task === 'string' ? data.task : null,
             lastSeen: Date.now(),
           });
+          return;
         }
+
+        if (data.type === 'agent.move' || data.type === 'report.new' || data.type === 'report.updated') {
+          fetchAll().catch(console.error);
+          return;
+        }
+
+        if (data.type === 'activity.recent' && Array.isArray(data.entries)) {
+          setActivity((data.entries as ActivityEntry[]).slice(-50));
+          return;
+        }
+
+        if (data.type === 'activity.entry' && data.entry) {
+          setActivity((prev) => [...prev, data.entry as ActivityEntry].slice(-50));
+          return;
+        }
+
+        fetchAll().catch(console.error);
       } catch {
-        // Ignore parse errors
+        fetchAll().catch(console.error);
       }
-      
-      fetchAll().catch(console.error);
+
       if (selectedDetail?.id) {
         fetch(`${apiBase}/api/tasks/${selectedDetail.id}`).then((res) => res.json()).then(setSelectedDetail).catch(console.error);
       }
@@ -291,7 +298,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       const officeAgent = agents.find((agent) => agent.id === desk.id);
       const task = taskByAgent.get(desk.id);
       const hasPending = pendingReports.some((report) => report.agent_id === desk.id);
-      const state: 'working' | 'blocked' | 'inactive' | 'finished' | 'reserved' = 
+      const state: 'working' | 'blocked' | 'inactive' | 'finished' | 'reserved' =
         task?.status === 'complete'
           ? 'finished'
           : task?.blocker_reason
@@ -323,7 +330,6 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
     });
   }, [agents, pendingReports, taskByAgent]);
 
-  // Use real agent data for stats (not the old desk config)
   const activeCount = agents.filter((a) => a.state === 'working').length;
   const blockedCount = agents.filter((a) => a.state === 'blocked').length;
 
@@ -388,56 +394,12 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         </div>
       </div>
 
-      {/* Movement Demo Controls */}
-      <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-4">
-        <p className="mb-3 text-xs uppercase tracking-wide text-slate-500">Movement Testing Controls</p>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => canvasRef.current?.startAgentEnter('main', 'main')}
-            className="rounded-lg bg-teal-600/80 px-3 py-1.5 text-xs text-white hover:bg-teal-500"
-          >
-            Mildred Enter
-          </button>
-          <button
-            onClick={() => canvasRef.current?.startAgentExit('main', 'main')}
-            className="rounded-lg bg-teal-800/80 px-3 py-1.5 text-xs text-white hover:bg-teal-700"
-          >
-            Mildred Exit
-          </button>
-          <button
-            onClick={() => canvasRef.current?.startAgentEnter('dev', 'dev')}
-            className="rounded-lg bg-gray-600/80 px-3 py-1.5 text-xs text-white hover:bg-gray-500"
-          >
-            Dev Enter
-          </button>
-          <button
-            onClick={() => canvasRef.current?.startAgentExit('dev', 'dev')}
-            className="rounded-lg bg-gray-800/80 px-3 py-1.5 text-xs text-white hover:bg-gray-700"
-          >
-            Dev Exit
-          </button>
-          <button
-            onClick={() => canvasRef.current?.startAgentEnter('janet', 'janet')}
-            className="rounded-lg bg-amber-700/80 px-3 py-1.5 text-xs text-white hover:bg-amber-600"
-          >
-            Janet Enter
-          </button>
-          <button
-            onClick={() => canvasRef.current?.startAgentExit('janet', 'janet')}
-            className="rounded-lg bg-amber-900/80 px-3 py-1.5 text-xs text-white hover:bg-amber-800"
-          >
-            Janet Exit
-          </button>
-        </div>
-      </div>
-
-      {/* New 2D pixel art game canvas */}
       <div className="rounded-3xl border border-slate-800 bg-slate-900/80 p-5">
         <OfficeCanvas2D
           agents={agents.map((a): OfficeAgent2D => ({
             id: a.id,
             name: a.name,
-            state: (['working','blocked','idle','offline','finished','reserved'].includes(a.state)
+            state: (['working', 'blocked', 'idle', 'offline', 'finished', 'reserved'].includes(a.state)
               ? a.state
               : 'idle') as OfficeAgent2D['state'],
             taskTitle: a.current_task,
@@ -446,6 +408,8 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
           onSelectAgent={(agentId) => void openAgentDetail(agentId)}
         />
       </div>
+
+      <ActivityFeed entries={activity} nowMs={nowMs} />
 
       <ReportsPanel
         reports={reports}
@@ -461,6 +425,63 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       )}
     </div>
   );
+}
+
+function ActivityFeed({ entries, nowMs }: { entries: ActivityEntry[]; nowMs: number }) {
+  const scrollerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const node = scrollerRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [entries]);
+
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950/90 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Live activity feed</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-100">Realtime agent events</h3>
+        </div>
+        <div className="text-xs text-slate-500">Showing last {entries.length} entries</div>
+      </div>
+      <div ref={scrollerRef} className="mt-4 max-h-[22rem] space-y-3 overflow-y-auto pr-1">
+        {entries.length === 0 && (
+          <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-900/40 px-4 py-6 text-sm text-slate-500">
+            Waiting for live gateway activity.
+          </div>
+        )}
+        {entries.map((entry) => (
+          <div key={entry.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 text-sm text-slate-100">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: agentColor(entry.agentId) }} />
+                  <span className="font-medium">{entry.agentName}</span>
+                </div>
+                <p className="mt-1 text-sm text-slate-300">{activityLabel(entry)}</p>
+                {entry.summary && entry.eventType !== 'speaking' && entry.summary !== activityLabel(entry) && (
+                  <p className="mt-1 text-xs text-slate-500">{entry.summary}</p>
+                )}
+              </div>
+              <div className="shrink-0 text-xs text-slate-500">{formatRelativeTime(entry.timestamp, nowMs)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function agentColor(agentId: string) {
+  const palette: Record<string, string> = {
+    main: '#14b8a6',
+    dev: '#94a3b8',
+    janet: '#f59e0b',
+    kimi: '#60a5fa',
+    'gpt-mini': '#4ade80',
+  };
+  return palette[agentId] ?? '#64748b';
 }
 
 function MiniStat({ label, value, tone }: { label: string; value: string; tone: string }) {

@@ -135,6 +135,16 @@ interface OfficeReportRow {
   approved_at: number | null;
 }
 
+interface ActivityEntry {
+  id: string;
+  timestamp: number;
+  agentId: string;
+  agentName: string;
+  eventType: 'thinking' | 'tool_call' | 'speaking' | 'idle' | 'error';
+  tool: string | null;
+  summary: string;
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -460,8 +470,22 @@ const selectEventsByTask = db.prepare<TaskEventRow>('SELECT * FROM task_events W
 const selectOfficeAgentById = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE id = ?');
 const selectLatestOfficeReportByTaskId = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE task_id = ? ORDER BY completed_at DESC LIMIT 1');
 
+const activityBuffer: ActivityEntry[] = [];
+const MAX_ACTIVITY_ENTRIES = 100;
+
 function createId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function pushActivityEntry(entry: ActivityEntry) {
+  activityBuffer.push(entry);
+  if (activityBuffer.length > MAX_ACTIVITY_ENTRIES) {
+    activityBuffer.splice(0, activityBuffer.length - MAX_ACTIVITY_ENTRIES);
+  }
+}
+
+function getRecentActivity(limit = 50) {
+  return activityBuffer.slice(-limit);
 }
 
 function parseJson<T extends JsonValue>(value: string | null): T | null {
@@ -538,16 +562,12 @@ function syncOfficeAgentForTask(task: TaskRow) {
   const { officeState, taskProgress, taskTitle } = deriveOfficeState(task);
   db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
     .run(officeState, taskTitle, taskProgress, task.agent_id);
-  officeWss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({
-        type: 'agent.state',
-        agentId: task.agent_id,
-        state: officeState,
-        task: taskTitle,
-        progress: taskProgress,
-      }));
-    }
+  broadcastToTopics(['office', 'all'], {
+    type: 'agent.state',
+    agentId: task.agent_id,
+    state: officeState,
+    task: taskTitle,
+    progress: taskProgress,
   });
 }
 
@@ -599,11 +619,7 @@ function upsertOfficeReport(task: TaskRow, options?: { forceApproved?: boolean; 
     lane?.name ?? null, task.model_used ?? null, now, reviewStatus, reviewedBy, reviewedBy ? now : null, approvedBy, approvedBy ? now : null,
   );
   const report = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(reportId) ?? null;
-  officeWss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'report.new', report }));
-    }
-  });
+  broadcastToTopics(['office', 'all'], { type: 'report.new', report });
   return report;
 }
 
@@ -1297,22 +1313,14 @@ app.post('/api/office/agents/:id/state', (req, res) => {
   const { state, task, progress } = req.body as { state?: string; task?: string; progress?: number };
   db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
     .run(state || 'idle', task || null, progress || 0, req.params.id);
-  officeWss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'agent.state', agentId: req.params.id, state, task, progress }));
-    }
-  });
+  broadcastToTopics(['office', 'all'], { type: 'agent.state', agentId: req.params.id, state, task, progress });
   res.json({ success: true });
 });
 
 app.post('/api/office/agents/:id/move', (req, res) => {
   const { x, y } = req.body as { x: number; y: number };
   db.prepare('UPDATE office_agents SET position_x = ?, position_y = ? WHERE id = ?').run(x, y, req.params.id);
-  officeWss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'agent.move', agentId: req.params.id, to: { x, y } }));
-    }
-  });
+  broadcastToTopics(['office', 'all'], { type: 'agent.move', agentId: req.params.id, to: { x, y } });
   res.json({ success: true });
 });
 
@@ -1320,6 +1328,10 @@ app.get('/api/office/reports', (req, res) => {
   const includePending = req.query.includePending === '1';
   const reports = db.prepare<OfficeReportRow>(`SELECT * FROM office_reports ${includePending ? '' : "WHERE review_status = 'approved'"} ORDER BY completed_at DESC`).all();
   res.json({ reports });
+});
+
+app.get('/api/activity/recent', (_req, res) => {
+  res.json({ entries: getRecentActivity(50) });
 });
 
 app.post('/api/office/report', (req, res) => {
@@ -1353,11 +1365,7 @@ app.post('/api/office/report/:id/approve', (req, res) => {
     WHERE id = ?
   `).run(approver, now, approver, now, report.id);
   const updated = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(report.id);
-  officeWss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify({ type: 'report.updated', report: updated }));
-    }
-  });
+  broadcastToTopics(['office', 'all'], { type: 'report.updated', report: updated });
   res.json(updated);
 });
 
@@ -1366,31 +1374,49 @@ app.post('/api/office/report/:id/acknowledge', (req, res) => {
   res.json({ success: true });
 });
 
-const officeWss = new WebSocketServer({ server, path: '/ws/office', perMessageDeflate: false });
+const wss = new WebSocketServer({ server, path: '/ws', perMessageDeflate: false });
+const clientSubs = new Map<WebSocket, Set<string>>();
 
-officeWss.on('connection', (ws) => {
-  const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
-  ws.send(JSON.stringify({ type: 'office.init', agents }));
-});
+function clientWantsTopic(ws: WebSocket, topic: string) {
+  const topics = clientSubs.get(ws);
+  if (!topics || topics.has('all')) return true;
+  return topics.has(topic);
+}
 
-const wss = new WebSocketServer({ server, path: '/gateway', perMessageDeflate: false });
-
-function broadcastUpdate(message: JsonObject | { type: string; data?: unknown }) {
+function broadcastToTopics(topics: string[], message: JsonObject | { type: string; data?: unknown; [key: string]: unknown }) {
   const payload = JSON.stringify(message);
   wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
+    if (client.readyState !== WebSocket.OPEN) return;
+    if (topics.some((topic) => clientWantsTopic(client, topic))) {
       client.send(payload);
     }
   });
 }
 
+function broadcastUpdate(message: JsonObject | { type: string; data?: unknown }) {
+  broadcastToTopics(['gateway', 'all'], message);
+}
+
 wss.on('connection', (ws) => {
+  clientSubs.set(ws, new Set(['all']));
+
+  const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
+  ws.send(JSON.stringify({ type: 'office.init', agents }));
+  ws.send(JSON.stringify({ type: 'activity.recent', entries: getRecentActivity() }));
+
   ws.on('message', (data) => {
     try {
-      handleGatewayMessage(JSON.parse(data.toString()) as JsonObject);
+      const msg = JSON.parse(data.toString()) as JsonObject & { topics?: unknown };
+      if (msg.type === 'subscribe' && Array.isArray(msg.topics)) {
+        clientSubs.set(ws, new Set(msg.topics.filter((topic): topic is string => typeof topic === 'string')));
+      }
     } catch {
-      // ignore malformed gateway messages
+      // ignore malformed client messages
     }
+  });
+
+  ws.on('close', () => {
+    clientSubs.delete(ws);
   });
 });
 
@@ -1478,7 +1504,6 @@ function initGateway() {
     const now = Date.now();
     const officeState = mapVisualStatusToOffice(parsed.status);
 
-    // Update agents table
     db.prepare(`
       INSERT INTO agents (id, name, status, last_seen)
       VALUES (?, ?, ?, ?)
@@ -1487,36 +1512,47 @@ function initGateway() {
         last_seen = excluded.last_seen
     `).run(parsed.agentId, parsed.agentId, parsed.status, now);
 
-    // Update office_agents if it exists
     const officeAgent = selectOfficeAgentById.get(parsed.agentId);
-    if (officeAgent) {
-      const taskLabel = parsed.tool
-        ? `Using ${parsed.tool}`
-        : parsed.summary.length > 60
-          ? parsed.summary.slice(0, 60) + '...'
-          : parsed.summary || null;
+    const agentName = officeAgent?.name ?? AGENT_DISPLAY_NAMES[parsed.agentId] ?? parsed.agentId;
+    const taskLabel = parsed.tool
+      ? `Using ${parsed.tool}`
+      : parsed.summary.length > 60
+        ? parsed.summary.slice(0, 60) + '...'
+        : parsed.summary || null;
 
+    if (officeAgent) {
       db.prepare('UPDATE office_agents SET state = ?, current_task = ? WHERE id = ?')
         .run(officeState, taskLabel, parsed.agentId);
 
-      // Broadcast to office WebSocket
-      officeWss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: 'agent.state',
-            agentId: parsed.agentId,
-            state: officeState,
-            task: taskLabel,
-            visualStatus: parsed.status,
-            tool: parsed.tool,
-            message: parsed.message,
-            runId: parsed.runId,
-          }));
-        }
+      broadcastToTopics(['office', 'all'], {
+        type: 'agent.state',
+        agentId: parsed.agentId,
+        state: officeState,
+        task: taskLabel,
+        visualStatus: parsed.status,
+        tool: parsed.tool,
+        message: parsed.message,
+        runId: parsed.runId,
       });
     }
 
-    // Broadcast to main WebSocket
+    const activityType: ActivityEntry['eventType'] = parsed.status === 'tool_calling'
+      ? 'tool_call'
+      : parsed.status === 'error'
+        ? 'error'
+        : parsed.status;
+    const activityEntry: ActivityEntry = {
+      id: createId('activity'),
+      timestamp: now,
+      agentId: parsed.agentId,
+      agentName,
+      eventType: activityType,
+      tool: parsed.tool,
+      summary: parsed.summary,
+    };
+    pushActivityEntry(activityEntry);
+    broadcastToTopics(['activity', 'office', 'all'], { type: 'activity.entry', entry: activityEntry });
+
     broadcastUpdate({
       type: 'agent_event',
       data: {

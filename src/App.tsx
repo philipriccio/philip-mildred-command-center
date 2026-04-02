@@ -251,8 +251,11 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const ws = new WebSocket(`${WS_BASE}/gateway`);
-    ws.onopen = () => setConnected(true);
+    const ws = new WebSocket(`${WS_BASE}/ws`);
+    ws.onopen = () => {
+      setConnected(true);
+      ws.send(JSON.stringify({ type: 'subscribe', topics: ['gateway'] }));
+    };
     ws.onclose = () => setConnected(false);
     ws.onmessage = () => {
       fetchAll().catch(console.error);
@@ -667,7 +670,7 @@ function App() {
           </div>
         )}
 
-        {viewMode === 'office' && <OfficePage apiBase={API_BASE} wsUrl={`${WS_BASE}/ws/office`} />}
+        {viewMode === 'office' && <OfficePage apiBase={API_BASE} wsUrl={`${WS_BASE}/ws`} />}
       </main>
 
       {showComposer && (
