@@ -4,6 +4,8 @@ import { OfficePage } from './components/OfficePage';
 import { CronPanel } from './components/CronPanel';
 import { SiteHealthPanel } from './components/SiteHealthPanel';
 import { SessionsPanel } from './components/SessionsPanel';
+import { ActivityTimeline } from './components/ActivityTimeline';
+import { QuickCommand } from './components/QuickCommand';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001';
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
@@ -510,6 +512,12 @@ function App() {
 
         {viewMode === 'dashboard' && dashboardStats && (
           <div className="space-y-6">
+            {/* Quick Command Bar + Activity Timeline */}
+            <section className="grid gap-6 xl:grid-cols-[1fr_1.5fr]">
+              <QuickCommand apiBase={API_BASE} />
+              <ActivityTimeline wsUrl={`${WS_BASE}/ws`} />
+            </section>
+
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
               <StatCard label="Active work" value={activeTasks.length} accent="text-blue-300" />
               <StatCard label="Verification" value={dashboardStats.byStatus.verification} accent="text-purple-300" />

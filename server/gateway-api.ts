@@ -93,4 +93,46 @@ export function registerGatewayApiRoutes(
 
     res.json({ sites: results, checkedAt: Date.now() });
   });
+
+  // ─── Send Message to Agent (via gateway RPC) ──────────────
+  app.post('/api/gateway/send', async (req, res) => {
+    try {
+      const gw = getGateway();
+      if (!gw?.isConnected()) {
+        res.status(503).json({ ok: false, error: 'Gateway not connected' });
+        return;
+      }
+      const { agentId, message } = req.body as { agentId?: string; message?: string };
+      if (!agentId || !message) {
+        res.status(400).json({ ok: false, error: 'agentId and message required' });
+        return;
+      }
+
+      // Use sessions.send RPC to send a message to the agent's session
+      const sessionKey = `agent:${agentId}:telegram:direct:8241414199`;
+      const data = await gw.request('sessions.send', {
+        sessionKey,
+        message,
+        timeoutSeconds: 0, // fire and forget
+      });
+      res.json({ ok: true, data });
+    } catch (e) {
+      res.status(502).json({ ok: false, error: String(e) });
+    }
+  });
+
+  // ─── Run Cron Job (via gateway RPC) ───────────────────────
+  app.post('/api/cron/run/:jobId', async (req, res) => {
+    try {
+      const gw = getGateway();
+      if (!gw?.isConnected()) {
+        res.status(503).json({ ok: false, error: 'Gateway not connected' });
+        return;
+      }
+      const data = await gw.request('cron.run', { jobId: req.params.jobId });
+      res.json({ ok: true, data });
+    } catch (e) {
+      res.status(502).json({ ok: false, error: String(e) });
+    }
+  });
 }
