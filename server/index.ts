@@ -8,7 +8,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import fs from 'fs';
+import os from 'os';
 import { Octokit } from 'octokit';
+import { GatewayClient, type AgentVisualStatus, type ParsedAgentEvent } from './gateway-client.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1356,57 +1358,155 @@ wss.on('connection', (ws) => {
   });
 });
 
-let gatewayWs: WebSocket | null = null;
+// ─── OpenClaw Gateway Integration ───────────────────────────────────
 
-function connectToGateway() {
+function readGatewayToken(): string {
   try {
-    gatewayWs = new WebSocket('ws://localhost:18789');
-    gatewayWs.on('open', () => {
-      db.prepare('UPDATE status SET gateway_connected = 1, last_update = ? WHERE id = 1').run(Date.now());
-      gatewayWs?.send(JSON.stringify({ type: 'register', client: 'command-center' }));
-    });
-    gatewayWs.on('message', (data) => {
-      try {
-        handleGatewayMessage(JSON.parse(data.toString()) as JsonObject);
-      } catch {
-        // ignore malformed gateway payload
-      }
-    });
-    gatewayWs.on('close', () => {
-      gatewayWs = null;
-      db.prepare('UPDATE status SET gateway_connected = 0 WHERE id = 1').run();
-      setTimeout(connectToGateway, 5000);
-    });
-    gatewayWs.on('error', () => {
-      db.prepare('UPDATE status SET gateway_connected = 0 WHERE id = 1').run();
-    });
+    const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    const raw = fs.readFileSync(configPath, 'utf-8');
+    const config = JSON.parse(raw) as { gateway?: { auth?: { token?: string } } };
+    return config?.gateway?.auth?.token ?? '';
   } catch {
-    setTimeout(connectToGateway, 5000);
+    console.warn('[GatewayIntegration] Could not read gateway token from ~/.openclaw/openclaw.json');
+    return '';
   }
 }
 
-function handleGatewayMessage(message: JsonObject) {
-  if (message.type === 'agent_status' || message.type === 'agent_update') {
-    const agent = typeof message.data === 'object' && message.data ? message.data as JsonObject : null;
-    if (agent?.id && typeof agent.id === 'string') {
-      db.prepare(`
-        INSERT INTO agents (id, name, status, last_seen)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-          name = excluded.name,
-          status = excluded.status,
-          last_seen = excluded.last_seen
-      `).run(agent.id, typeof agent.name === 'string' ? agent.name : agent.id, typeof agent.status === 'string' ? agent.status : 'unknown', Date.now());
-    }
+const GATEWAY_WS_URL = process.env.GATEWAY_WS_URL ?? 'ws://127.0.0.1:18789';
+const gatewayToken = process.env.GATEWAY_TOKEN ?? readGatewayToken();
+
+let gateway: GatewayClient | null = null;
+
+function mapVisualStatusToOffice(status: AgentVisualStatus): string {
+  switch (status) {
+    case 'thinking': return 'working';
+    case 'tool_calling': return 'working';
+    case 'speaking': return 'working';
+    case 'error': return 'blocked';
+    case 'idle': return 'idle';
+    case 'offline': return 'offline';
+    default: return 'idle';
   }
-  broadcastUpdate({ type: String(message.type || 'gateway_message'), data: message.data });
 }
+
+function initGateway() {
+  if (!gatewayToken) {
+    console.warn('[GatewayIntegration] No gateway token — skipping live connection');
+    return;
+  }
+
+  gateway = new GatewayClient(GATEWAY_WS_URL, gatewayToken);
+
+  gateway.onStatus((status, error) => {
+    const connected = status === 'connected' ? 1 : 0;
+    db.prepare('UPDATE status SET gateway_connected = ?, last_update = ? WHERE id = 1').run(connected, Date.now());
+
+    // Broadcast connection status to all frontend clients
+    broadcastUpdate({ type: 'gateway_status', data: { status, error: error ?? null } });
+
+    if (status === 'connected') {
+      console.log('[GatewayIntegration] ✓ Connected to OpenClaw gateway');
+    } else if (status === 'error') {
+      console.error(`[GatewayIntegration] Connection error: ${error}`);
+    }
+  });
+
+  gateway.onAgentEvent((parsed: ParsedAgentEvent) => {
+    const now = Date.now();
+    const officeState = mapVisualStatusToOffice(parsed.status);
+
+    // Update agents table
+    db.prepare(`
+      INSERT INTO agents (id, name, status, last_seen)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        status = excluded.status,
+        last_seen = excluded.last_seen
+    `).run(parsed.agentId, parsed.agentId, parsed.status, now);
+
+    // Update office_agents if it exists
+    const officeAgent = selectOfficeAgentById.get(parsed.agentId);
+    if (officeAgent) {
+      const taskLabel = parsed.tool
+        ? `Using ${parsed.tool}`
+        : parsed.summary.length > 60
+          ? parsed.summary.slice(0, 60) + '...'
+          : parsed.summary || null;
+
+      db.prepare('UPDATE office_agents SET state = ?, current_task = ? WHERE id = ?')
+        .run(officeState, taskLabel, parsed.agentId);
+
+      // Broadcast to office WebSocket
+      officeWss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: 'agent.state',
+            agentId: parsed.agentId,
+            state: officeState,
+            task: taskLabel,
+            visualStatus: parsed.status,
+            tool: parsed.tool,
+            message: parsed.message,
+            runId: parsed.runId,
+          }));
+        }
+      });
+    }
+
+    // Broadcast to main WebSocket
+    broadcastUpdate({
+      type: 'agent_event',
+      data: {
+        agentId: parsed.agentId,
+        status: parsed.status,
+        officeState,
+        tool: parsed.tool,
+        message: parsed.message,
+        summary: parsed.summary,
+        runId: parsed.runId,
+        sessionKey: parsed.sessionKey,
+        timestamp: now,
+      },
+    });
+  });
+
+  // Forward all gateway events to frontend
+  gateway.onEvent((event, payload) => {
+    broadcastUpdate({ type: `gateway.${event}`, data: payload });
+  });
+
+  gateway.connect();
+}
+
+// API endpoint for live agent states from gateway
+app.get('/api/gateway/agents', (_req, res) => {
+  if (!gateway?.isConnected()) {
+    res.json({ connected: false, agents: {} });
+    return;
+  }
+  const states: Record<string, unknown> = {};
+  for (const [id, state] of gateway.getAgentStates()) {
+    states[id] = { ...state, officeState: mapVisualStatusToOffice(state.status) };
+  }
+  res.json({ connected: true, agents: states, server: gateway.getServerInfo() });
+});
+
+// API endpoint for gateway status
+app.get('/api/gateway/status', (_req, res) => {
+  res.json({
+    connected: gateway?.isConnected() ?? false,
+    status: gateway?.getStatus() ?? 'disconnected',
+    server: gateway?.getServerInfo() ?? null,
+    snapshot: gateway?.getSnapshot() ?? null,
+  });
+});
 
 server.listen(PORT, () => {
   console.log(`Command Center API running on port ${PORT}`);
   console.log(`Frontend origins: ${FRONTEND_ORIGINS.join(', ')}`);
   console.log(`GitHub: ${octokit ? 'enabled' : 'disabled'}`);
-  connectToGateway();
+  console.log(`Gateway: ${gatewayToken ? 'token loaded, connecting...' : 'no token, skipping'}`);
+  initGateway();
 });
 
 export { app, db };
