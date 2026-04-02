@@ -79,10 +79,11 @@ const DESK_LAYOUT = OFFICE_SCENE_DESK_ORDER.map((id) => ({
 }));
 
 const FALLBACK_AGENTS: OfficeAgent[] = [
-  { id: 'mildred', name: 'Mildred', position_x: 0, position_y: 0, state: 'blocked', current_task: 'Waiting on approval', task_progress: 58, color: '#008080', office_enabled: 1 },
-  { id: 'dev', name: 'Dev', position_x: 0, position_y: 0, state: 'working', current_task: 'Implement office master scene', task_progress: 76, color: '#808080', office_enabled: 1 },
-  { id: 'research', name: 'Claire', position_x: 0, position_y: 0, state: 'working', current_task: 'Mission Control visual design', task_progress: 45, color: '#8B4513', office_enabled: 1 },
-  { id: 'content', name: 'Future', position_x: 0, position_y: 0, state: 'reserved', current_task: null, task_progress: 0, color: '#7c6f4f', office_enabled: 1 },
+  { id: 'main', name: 'Mildred', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#008080', office_enabled: 1 },
+  { id: 'dev', name: 'Dev', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#808080', office_enabled: 1 },
+  { id: 'janet', name: 'Janet', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#8B4513', office_enabled: 1 },
+  { id: 'kimi', name: 'Kimi', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#2E86C1', office_enabled: 1 },
+  { id: 'gpt-mini', name: 'GPT-mini', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#27AE60', office_enabled: 1 },
 ];
 
 const FALLBACK_TASKS: Task[] = [
@@ -290,9 +291,8 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       const officeAgent = agents.find((agent) => agent.id === desk.id);
       const task = taskByAgent.get(desk.id);
       const hasPending = pendingReports.some((report) => report.agent_id === desk.id);
-      const state: 'working' | 'blocked' | 'inactive' | 'finished' | 'reserved' = desk.id === 'content'
-        ? 'reserved'
-        : task?.status === 'complete'
+      const state: 'working' | 'blocked' | 'inactive' | 'finished' | 'reserved' = 
+        task?.status === 'complete'
           ? 'finished'
           : task?.blocker_reason
             ? 'blocked'
@@ -313,11 +313,11 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
           name: desk.label,
           color: officeAgent?.color || '#64748b',
           state,
-          taskTitle: state === 'reserved' ? 'Reserved for future agent' : state === 'finished' ? null : task?.title || null,
-          progress: state === 'reserved' ? 0 : officeAgent?.task_progress || (state === 'blocked' ? 55 : state === 'working' ? 35 : 0),
-          summary: state === 'reserved' ? 'Future workstation kept open for expansion.' : task?.progress_summary || task?.request_summary || null,
-          blocker: state === 'reserved' ? null : task?.blocker_reason || null,
-          isClickable: desk.id === 'content' || Boolean(task),
+          taskTitle: state === 'finished' ? null : task?.title || null,
+          progress: officeAgent?.task_progress || (state === 'blocked' ? 55 : state === 'working' ? 35 : 0),
+          summary: task?.progress_summary || task?.request_summary || null,
+          blocker: task?.blocker_reason || null,
+          isClickable: Boolean(task),
         },
       };
     });
@@ -329,31 +329,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
 
   const openAgentDetail = async (agentId: string) => {
     const task = taskByAgent.get(agentId);
-    if (!task) {
-      if (agentId === 'content') {
-        setSelectedDetail({
-          id: 'reserved-future-desk',
-          title: 'Reserved future workstation',
-          description: 'This desk is intentionally held open for a future agent slot.',
-          status: 'ready',
-          agent_id: null,
-          lane_id: null,
-          blocker_reason: null,
-          request_summary: 'Reserved desk in the office master scene.',
-          completion_summary: null,
-          progress_summary: 'No active agent assigned yet. The station stays visible so the room can expand without relayout.',
-          next_step: 'Assign a future agent when the next persistent role comes online.',
-          model_used: null,
-          updated_at: Date.now(),
-          agent_name: 'Future agent',
-          lane_name: 'Reserved',
-          delivery_notes: 'Reserved desk state implemented from scene config spec.',
-          office_report: null,
-          history: [],
-        });
-      }
-      return;
-    }
+    if (!task) return;
     if (usingFallbackData && task.id.startsWith('fallback-')) {
       setSelectedDetail({
         ...task,
@@ -417,13 +393,13 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         <p className="mb-3 text-xs uppercase tracking-wide text-slate-500">Movement Testing Controls</p>
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => canvasRef.current?.startAgentEnter('mildred', 'mildred')}
+            onClick={() => canvasRef.current?.startAgentEnter('main', 'main')}
             className="rounded-lg bg-teal-600/80 px-3 py-1.5 text-xs text-white hover:bg-teal-500"
           >
             Mildred Enter
           </button>
           <button
-            onClick={() => canvasRef.current?.startAgentExit('mildred', 'mildred')}
+            onClick={() => canvasRef.current?.startAgentExit('main', 'main')}
             className="rounded-lg bg-teal-800/80 px-3 py-1.5 text-xs text-white hover:bg-teal-700"
           >
             Mildred Exit
@@ -441,16 +417,16 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
             Dev Exit
           </button>
           <button
-            onClick={() => canvasRef.current?.startAgentEnter('research', 'research')}
+            onClick={() => canvasRef.current?.startAgentEnter('janet', 'janet')}
             className="rounded-lg bg-amber-700/80 px-3 py-1.5 text-xs text-white hover:bg-amber-600"
           >
-            Claire Enter
+            Janet Enter
           </button>
           <button
-            onClick={() => canvasRef.current?.startAgentExit('research', 'research')}
+            onClick={() => canvasRef.current?.startAgentExit('janet', 'janet')}
             className="rounded-lg bg-amber-900/80 px-3 py-1.5 text-xs text-white hover:bg-amber-800"
           >
-            Claire Exit
+            Janet Exit
           </button>
         </div>
       </div>

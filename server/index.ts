@@ -368,10 +368,11 @@ for (const statement of migrationStatements) {
 db.exec(`INSERT OR IGNORE INTO status (id, gateway_connected, last_update) VALUES (1, 0, 0)`);
 
 const defaultAgents = [
-  { id: 'mildred', name: 'Mildred (Main Agent)' },
+  { id: 'main', name: 'Mildred (Main Agent)' },
   { id: 'dev', name: 'Dev (Coding Agent)' },
-  { id: 'content-agent', name: 'Content Agent (Future)' },
-  { id: 'research-agent', name: 'Research Agent (Future)' },
+  { id: 'janet', name: 'Janet (Email Agent)' },
+  { id: 'kimi', name: 'Kimi (Research Agent)' },
+  { id: 'gpt-mini', name: 'GPT-mini (Utility Agent)' },
 ] as const;
 
 const insertAgent = db.prepare(`
@@ -399,18 +400,16 @@ for (const lane of defaultLanes) {
 
 // Agent desk positions in the pixel art office grid
 const AGENT_DESK_POSITIONS: Record<string, { x: number; y: number }> = {
-  main:      { x: 18, y: 4 },   // Mildred's desk (top-right)
-  dev:       { x: 3,  y: 4 },   // Dev's desk (top-left)
-  claire:    { x: 3,  y: 12 },  // Claire's desk (bottom-left)
-  janet:     { x: 18, y: 12 },  // Janet's desk (bottom-right)
-  kimi:      { x: 10, y: 4 },   // Kimi's desk (top-center)
-  'gpt-mini': { x: 10, y: 12 }, // GPT-mini's desk (bottom-center)
+  main:       { x: 18, y: 4 },   // Mildred's desk (top-right)
+  dev:        { x: 3,  y: 4 },   // Dev's desk (top-left)
+  janet:      { x: 3,  y: 12 },  // Janet's desk (bottom-left)
+  kimi:       { x: 18, y: 12 },  // Kimi's desk (bottom-right)
+  'gpt-mini': { x: 10, y: 8 },   // GPT-mini's desk (center)
 };
 
 const AGENT_COLORS: Record<string, string> = {
   main: '#008080',
   dev: '#808080',
-  claire: '#800080',
   janet: '#8B4513',
   kimi: '#2E86C1',
   'gpt-mini': '#27AE60',
@@ -419,23 +418,26 @@ const AGENT_COLORS: Record<string, string> = {
 const AGENT_DISPLAY_NAMES: Record<string, string> = {
   main: 'Mildred',
   dev: 'Dev',
-  claire: 'Claire',
   janet: 'Janet',
   kimi: 'Kimi',
   'gpt-mini': 'GPT-mini',
 };
 
 // Clean up legacy hardcoded agents that don't match gateway IDs
-for (const legacyId of ['mildred', 'content', 'research']) {
+for (const legacyId of ['mildred', 'content', 'research', 'claire', 'content-agent', 'research-agent']) {
   db.prepare('DELETE FROM office_agents WHERE id = ?').run(legacyId);
+  // Clean up task references first, then agent
+  db.prepare('UPDATE tasks SET agent_id = NULL WHERE agent_id = ?').run(legacyId);
+  db.prepare('DELETE FROM agents WHERE id = ?').run(legacyId);
 }
 
 // Default agents — these are the real gateway agent IDs
 const officeDefaultAgents = [
   { id: 'main', name: 'Mildred', position_x: 18, position_y: 4, state: 'idle', color: '#008080' },
   { id: 'dev', name: 'Dev', position_x: 3, position_y: 4, state: 'idle', color: '#808080' },
-  { id: 'claire', name: 'Claire', position_x: 3, position_y: 12, state: 'idle', color: '#800080' },
-  { id: 'janet', name: 'Janet', position_x: 18, position_y: 12, state: 'idle', color: '#8B4513' },
+  { id: 'janet', name: 'Janet', position_x: 3, position_y: 12, state: 'idle', color: '#8B4513' },
+  { id: 'kimi', name: 'Kimi', position_x: 18, position_y: 12, state: 'idle', color: '#2E86C1' },
+  { id: 'gpt-mini', name: 'GPT-mini', position_x: 10, position_y: 8, state: 'idle', color: '#27AE60' },
 ] as const;
 
 const insertOfficeAgent = db.prepare(`
@@ -1364,14 +1366,14 @@ app.post('/api/office/report/:id/acknowledge', (req, res) => {
   res.json({ success: true });
 });
 
-const officeWss = new WebSocketServer({ server, path: '/ws/office' });
+const officeWss = new WebSocketServer({ server, path: '/ws/office', perMessageDeflate: false });
 
 officeWss.on('connection', (ws) => {
   const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
   ws.send(JSON.stringify({ type: 'office.init', agents }));
 });
 
-const wss = new WebSocketServer({ server, path: '/gateway' });
+const wss = new WebSocketServer({ server, path: '/gateway', perMessageDeflate: false });
 
 function broadcastUpdate(message: JsonObject | { type: string; data?: unknown }) {
   const payload = JSON.stringify(message);

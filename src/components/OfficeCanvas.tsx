@@ -9,8 +9,9 @@ import reportsTrayAsset from '../../assets/generated/reports-tray-v1.png';
 const devAvatarAsset = '/sprites/sprite-dev.png';
 const mildredAvatarAsset = '/sprites/sprite-mildred.png';
 const officeMasterSceneAsset = '/sprites/office-background.png';
-const researchAvatarAsset = '/sprites/sprite-claire.png';
-const contentAvatarAsset = '/sprites/sprite-future.png';
+const janetAvatarAsset = '/sprites/sprite-janet.png';
+const kimiAvatarAsset = '/sprites/sprite-kimi.png';
+const gptMiniAvatarAsset = '/sprites/sprite-gpt-mini.png';
 import { OFFICE_SCENE_CONFIG, OFFICE_SCENE_SIZE, type OfficeSceneDeskId } from '../officeSceneConfig';
 import { MovingAgent, useAgentMovement } from './AgentMovement';
 
@@ -39,8 +40,9 @@ interface OfficeDesk {
 const AVATAR_ASSETS: Record<string, string> = {
   mildred: mildredAvatarAsset,
   dev: devAvatarAsset,
-  research: researchAvatarAsset,
-  content: contentAvatarAsset,
+  janet: janetAvatarAsset,
+  kimi: kimiAvatarAsset,
+  'gpt-mini': gptMiniAvatarAsset,
 };
 
 const AVATAR_OFFSETS: Record<string, { left: number; top: number; width: number; height: number }> = {
@@ -273,7 +275,7 @@ function stateLabel(state: OfficeDeskAgent['state']) {
   if (state === 'working') return 'Active task in progress.';
   if (state === 'blocked') return 'Blocked and waiting.';
   if (state === 'finished') return 'Finished and stepped away.';
-  if (state === 'reserved') return 'Reserved for future agent.';
+  if (state === 'reserved') return 'No task assigned.';
   return 'Desk empty.';
 }
 

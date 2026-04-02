@@ -52,10 +52,11 @@ const DOOR = { x: W / 2 - 20, y: 665, w: 40, h: 14 };
 
 // Desk positions (center of chair position)
 const DESKS: Record<string, { x: number; y: number; deskX: number; deskY: number; label: string }> = {
-  mildred: { x: 160, y: 490, deskX: 120, deskY: 430, label: 'Mildred' },
-  dev:     { x: 400, y: 400, deskX: 360, deskY: 340, label: 'Dev' },
-  claire:  { x: 160, y: 600, deskX: 120, deskY: 545, label: 'Claire' },
-  future:  { x: 400, y: 600, deskX: 360, deskY: 545, label: 'Future' },
+  main:      { x: 160, y: 490, deskX: 120, deskY: 430, label: 'Mildred' },
+  dev:       { x: 400, y: 400, deskX: 360, deskY: 340, label: 'Dev' },
+  janet:     { x: 160, y: 600, deskX: 120, deskY: 545, label: 'Janet' },
+  kimi:      { x: 400, y: 600, deskX: 360, deskY: 545, label: 'Kimi' },
+  'gpt-mini':{ x: 280, y: 300, deskX: 240, deskY: 240, label: 'GPT-mini' },
 };
 
 // Waypoints
@@ -568,26 +569,25 @@ function lighten(hex: string): string {
 
 // ─── Demo mode agents (used when no real agents provided) ─────────────────────
 const DEMO_AGENTS: OfficeAgent[] = [
-  { id: 'main',    name: 'Mildred',  state: 'idle', taskTitle: null, color: '#008080' },
-  { id: 'dev',     name: 'Dev',      state: 'idle', taskTitle: null, color: '#808080' },
-  { id: 'claire',  name: 'Claire',   state: 'idle', taskTitle: null, color: '#800080' },
-  { id: 'janet',   name: 'Janet',    state: 'idle', taskTitle: null, color: '#8B4513' },
-  { id: 'kimi',    name: 'Kimi',     state: 'idle', taskTitle: null, color: '#2E86C1' },
-  { id: 'gpt-mini',name: 'GPT-mini', state: 'idle', taskTitle: null, color: '#27AE60' },
+  { id: 'main',     name: 'Mildred',  state: 'idle', taskTitle: null, color: '#008080' },
+  { id: 'dev',      name: 'Dev',      state: 'idle', taskTitle: null, color: '#808080' },
+  { id: 'janet',    name: 'Janet',    state: 'idle', taskTitle: null, color: '#8B4513' },
+  { id: 'kimi',     name: 'Kimi',     state: 'idle', taskTitle: null, color: '#2E86C1' },
+  { id: 'gpt-mini', name: 'GPT-mini', state: 'idle', taskTitle: null, color: '#27AE60' },
 ];
 
 // Automated demo scenario: cycles agents through states every few seconds
 const DEMO_SCRIPT: Array<{ delay: number; agentId: string; state: OfficeAgent['state'] }> = [
-  { delay: 1000,  agentId: 'main',   state: 'working' },
-  { delay: 3000,  agentId: 'dev',    state: 'working' },
-  { delay: 5000,  agentId: 'claire', state: 'working' },
-  { delay: 10000, agentId: 'dev',    state: 'blocked' },
-  { delay: 15000, agentId: 'claire', state: 'idle' },
-  { delay: 20000, agentId: 'dev',    state: 'working' },
-  { delay: 25000, agentId: 'main',   state: 'finished' },
-  { delay: 30000, agentId: 'dev',    state: 'finished' },
-  { delay: 35000, agentId: 'main',   state: 'working' },
-  { delay: 38000, agentId: 'dev',    state: 'working' },
+  { delay: 1000,  agentId: 'main',  state: 'working' },
+  { delay: 3000,  agentId: 'dev',   state: 'working' },
+  { delay: 5000,  agentId: 'janet', state: 'working' },
+  { delay: 10000, agentId: 'dev',   state: 'blocked' },
+  { delay: 15000, agentId: 'janet', state: 'idle' },
+  { delay: 20000, agentId: 'dev',   state: 'working' },
+  { delay: 25000, agentId: 'main',  state: 'finished' },
+  { delay: 30000, agentId: 'dev',   state: 'finished' },
+  { delay: 35000, agentId: 'main',  state: 'working' },
+  { delay: 38000, agentId: 'dev',   state: 'working' },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
