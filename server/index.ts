@@ -1600,6 +1600,10 @@ app.get('/api/gateway/status', (_req, res) => {
   });
 });
 
+// ─── Gateway API Proxy Routes (cron, sessions, site health) ────────────
+import { registerGatewayApiRoutes } from './gateway-api.js';
+registerGatewayApiRoutes(app, () => gateway);
+
 server.listen(PORT, () => {
   console.log(`Command Center API running on port ${PORT}`);
   console.log(`Frontend origins: ${FRONTEND_ORIGINS.join(', ')}`);

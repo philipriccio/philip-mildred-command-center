@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AgentCard } from './components/AgentCard';
 import { OfficePage } from './components/OfficePage';
+import { CronPanel } from './components/CronPanel';
+import { SiteHealthPanel } from './components/SiteHealthPanel';
+import { SessionsPanel } from './components/SessionsPanel';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:3001';
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
@@ -618,6 +621,19 @@ function App() {
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-1">
                   {agents.map((agent) => <AgentCard key={agent.id} agent={agent} />)}
                 </div>
+              </Panel>
+            </section>
+
+            {/* Operations panels — cron, sessions, site health */}
+            <section className="grid gap-6 xl:grid-cols-3">
+              <Panel title="Cron Monitor">
+                <CronPanel apiBase={API_BASE} />
+              </Panel>
+              <Panel title="Active Sessions">
+                <SessionsPanel apiBase={API_BASE} />
+              </Panel>
+              <Panel title="Production Sites">
+                <SiteHealthPanel apiBase={API_BASE} />
               </Panel>
             </section>
           </div>

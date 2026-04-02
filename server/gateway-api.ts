@@ -1,82 +1,53 @@
 /**
- * Gateway REST API proxy endpoints.
+ * Gateway API proxy endpoints.
  * 
- * These forward requests to the local OpenClaw gateway HTTP API
- * to provide cron, session, and health data to the Command Center frontend.
+ * These use the gateway WebSocket RPC to fetch cron, session, and health data.
+ * Site health is checked directly via HTTP fetch to the production URLs.
  */
 
 import type { Express } from 'express';
+import type { GatewayClient } from './gateway-client.js';
 
-const GATEWAY_API = process.env.GATEWAY_API_URL ?? 'http://127.0.0.1:18789';
+export function registerGatewayApiRoutes(
+  app: Express,
+  getGateway: () => GatewayClient | null,
+) {
 
-async function gatewayFetch(path: string, token: string, options: RequestInit = {}) {
-  const url = `${GATEWAY_API}${path}`;
-  const res = await fetch(url, {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-  });
-  if (!res.ok) {
-    throw new Error(`Gateway ${path}: ${res.status} ${res.statusText}`);
-  }
-  return res.json();
-}
-
-export function registerGatewayApiRoutes(app: Express, getToken: () => string) {
-
-  // ─── Cron Jobs ─────────────────────────────────────────────
+  // ─── Cron Jobs (via gateway RPC) ──────────────────────────
   app.get('/api/cron/jobs', async (_req, res) => {
     try {
-      const token = getToken();
-      if (!token) {
-        res.status(503).json({ error: 'No gateway token' });
+      const gw = getGateway();
+      if (!gw?.isConnected()) {
+        res.status(503).json({ error: 'Gateway not connected' });
         return;
       }
-      const data = await gatewayFetch('/api/cron/jobs?includeDisabled=true', token);
+      const data = await gw.request('cron.list', { includeDisabled: true });
       res.json(data);
     } catch (e) {
       res.status(502).json({ error: String(e) });
     }
   });
 
-  app.get('/api/cron/status', async (_req, res) => {
-    try {
-      const token = getToken();
-      if (!token) {
-        res.status(503).json({ error: 'No gateway token' });
-        return;
-      }
-      const data = await gatewayFetch('/api/cron/status', token);
-      res.json(data);
-    } catch (e) {
-      res.status(502).json({ error: String(e) });
-    }
-  });
-
-  // ─── Sessions ──────────────────────────────────────────────
+  // ─── Sessions (via gateway RPC) ───────────────────────────
   app.get('/api/sessions', async (req, res) => {
     try {
-      const token = getToken();
-      if (!token) {
-        res.status(503).json({ error: 'No gateway token' });
+      const gw = getGateway();
+      if (!gw?.isConnected()) {
+        res.status(503).json({ error: 'Gateway not connected' });
         return;
       }
-      const params = new URLSearchParams();
-      if (req.query.activeMinutes) params.set('activeMinutes', String(req.query.activeMinutes));
-      if (req.query.messageLimit) params.set('messageLimit', String(req.query.messageLimit));
-      if (req.query.limit) params.set('limit', String(req.query.limit));
-      const qs = params.toString() ? `?${params.toString()}` : '';
-      const data = await gatewayFetch(`/api/sessions${qs}`, token);
+      const params: Record<string, unknown> = {};
+      if (req.query.activeMinutes) params.activeMinutes = Number(req.query.activeMinutes);
+      if (req.query.messageLimit) params.messageLimit = Number(req.query.messageLimit);
+      if (req.query.limit) params.limit = Number(req.query.limit);
+      const data = await gw.request('sessions.list', params);
       res.json(data);
     } catch (e) {
       res.status(502).json({ error: String(e) });
     }
   });
 
-  // ─── Site Health ───────────────────────────────────────────
+  // ─── Site Health (direct HTTP checks) ─────────────────────
   app.get('/api/health/sites', async (_req, res) => {
     const sites = [
       { name: 'Company Theatre', url: 'https://companytheatre.ca' },
@@ -99,7 +70,6 @@ export function registerGatewayApiRoutes(app: Express, getToken: () => string) {
         });
         clearTimeout(timeout);
         const elapsed = Date.now() - start;
-        // 2xx and 3xx are OK. 401 for CRM is expected (auth wall).
         const isOk = r.status < 500;
         return {
           url: site.url,
