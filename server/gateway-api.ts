@@ -47,6 +47,39 @@ export function registerGatewayApiRoutes(
     }
   });
 
+  // ─── Sessions Usage (via gateway RPC) ──────────────────────
+  app.get('/api/sessions/usage', async (_req, res) => {
+    try {
+      const gw = getGateway();
+      if (!gw?.isConnected()) {
+        res.status(503).json({ error: 'Gateway not connected' });
+        return;
+      }
+      // Get recent sessions with usage data
+      const data = await gw.request('sessions.list', {
+        activeMinutes: 1440, // last 24 hours
+        limit: 100,
+        messageLimit: 0,
+      }) as { sessions?: Array<Record<string, unknown>> };
+
+      // Extract usage info from sessions
+      const sessions = (data.sessions || []).map((s: Record<string, unknown>) => ({
+        sessionKey: s.key || s.sessionKey || '',
+        agentId: s.agentId || '',
+        model: s.model || '',
+        inputTokens: (s.usage as Record<string, number> | undefined)?.inputTokens || (s as Record<string, number>).inputTokens || 0,
+        outputTokens: (s.usage as Record<string, number> | undefined)?.outputTokens || (s as Record<string, number>).outputTokens || 0,
+        totalTokens: (s.usage as Record<string, number> | undefined)?.totalTokens || (s as Record<string, number>).totalTokens || 0,
+        cost: (s.usage as Record<string, number> | undefined)?.cost || (s as Record<string, number>).cost || 0,
+        lastActiveAt: s.lastActiveAt || s.updatedAt || 0,
+      }));
+
+      res.json({ sessions });
+    } catch (e) {
+      res.status(502).json({ error: String(e) });
+    }
+  });
+
   // ─── Site Health (direct HTTP checks) ─────────────────────
   app.get('/api/health/sites', async (_req, res) => {
     const sites = [

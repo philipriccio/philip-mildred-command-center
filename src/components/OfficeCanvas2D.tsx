@@ -524,14 +524,14 @@ function drawStatusBar(ctx: CanvasRenderingContext2D, agents: AgentRuntime[]) {
     // Color dot
     ctx.fillStyle = r.color;
     ctx.beginPath();
-    ctx.arc(bx - 55, by, 6, 0, Math.PI * 2);
+    ctx.arc(bx - 40, by, 5, 0, Math.PI * 2);
     ctx.fill();
 
     // Name
     ctx.fillStyle = C.textBright;
-    ctx.font = 'bold 12px "JetBrains Mono", monospace';
+    ctx.font = 'bold 11px "JetBrains Mono", monospace';
     ctx.textAlign = 'left';
-    ctx.fillText(r.name, bx - 44, by + 4);
+    ctx.fillText(r.name, bx - 30, by - 2);
 
     // State label
     const stateLabel = {
@@ -554,7 +554,7 @@ function drawStatusBar(ctx: CanvasRenderingContext2D, agents: AgentRuntime[]) {
 
     ctx.fillStyle = stateColor;
     ctx.font = '10px "JetBrains Mono", monospace';
-    ctx.fillText(stateLabel, bx - 44, by + 17);
+    ctx.fillText(stateLabel, bx - 30, by + 12);
   });
 }
 
@@ -691,12 +691,16 @@ export function OfficeCanvas2D({ agents: propAgents, onSelectAgent }: OfficeCanv
 
   // Click handling
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
-    const rect = canvasRef.current!.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const canvas = canvasRef.current!;
+    const rect = canvas.getBoundingClientRect();
+    // Scale mouse coords back to canvas pixel space (CSS scales the canvas)
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
     for (const r of runtimeRef.current) {
       if (!r.visible) continue;
-      if (Math.abs(mx - r.pos.x) < 20 && Math.abs(my - r.pos.y) < 24) {
+      if (Math.abs(mx - r.pos.x) < 30 && Math.abs(my - r.pos.y) < 34) {
         onSelectAgent?.(r.id);
         break;
       }
@@ -737,14 +741,14 @@ export function OfficeCanvas2D({ agents: propAgents, onSelectAgent }: OfficeCanv
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      <div className="overflow-hidden">
         <canvas
           ref={canvasRef}
           width={W}
           height={H}
           onClick={handleClick}
           className="cursor-pointer rounded-2xl border border-[#1e293b]"
-          style={{ display: 'block', imageRendering: 'pixelated' }}
+          style={{ display: 'block', imageRendering: 'pixelated', width: '100%', height: 'auto' }}
         />
       </div>
     </div>
