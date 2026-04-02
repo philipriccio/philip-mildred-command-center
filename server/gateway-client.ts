@@ -317,9 +317,11 @@ export class GatewayClient {
       return;
     }
 
-    // Agent events
-    if (frame.event === 'agent.event') {
-      this.processAgentEvent(frame.payload as AgentEventPayload);
+    // Agent events — gateway sends 'agent' not 'agent.event'
+    if (frame.event === 'agent' || frame.event === 'agent.event') {
+      const evtPayload = frame.payload as AgentEventPayload;
+      console.log(`[GatewayClient] agent event stream=${evtPayload.stream} runId=${evtPayload.runId?.slice(0,8)} session=${evtPayload.sessionKey?.slice(0,30)}`);
+      this.processAgentEvent(evtPayload);
     }
 
     // Notify listeners

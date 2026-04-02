@@ -118,8 +118,7 @@ function makeRuntime(agent: OfficeAgent): AgentRuntime {
 
 function stateToPhase(state: OfficeAgent['state']): AgentPhase {
   if (state === 'working' || state === 'blocked') return 'entering';
-  if (state === 'idle') return 'sitting';   // idle = at desk, available
-  if (state === 'finished') return 'exiting';
+  // idle, finished, offline, reserved → not in the room
   return 'gone';
 }
 
@@ -192,22 +191,22 @@ function syncState(r: AgentRuntime, newState: OfficeAgent['state']) {
   const desk = DESKS[r.id];
 
   if (newState === 'working' || newState === 'blocked') {
-    if (r.phase !== 'sitting') {
+    // Agent starts working → enter the room and sit at desk
+    if (r.phase !== 'sitting' && r.phase !== 'entering') {
       r.phase = 'entering';
       r.pos = { ...WP.door };
       r.visible = true;
       r.path = desk ? buildPath(WP.door, desk) : [];
     }
-  } else if (newState === 'idle') {
-    r.phase = 'wandering';
-    r.wanderTimer = 0;
-    r.visible = true;
-  } else if (newState === 'finished') {
-    r.phase = 'exiting';
-    r.path = [{ ...WP.hub }, { ...WP.door }];
   } else {
-    r.phase = 'gone';
-    r.visible = false;
+    // Agent stops working (idle, finished, offline) → leave the room
+    if (r.phase === 'sitting' || r.phase === 'entering' || r.phase === 'wandering') {
+      r.phase = 'exiting';
+      r.path = [{ ...WP.hub }, { ...WP.door }];
+    } else if (r.phase === 'gone') {
+      // already gone, stay gone
+      r.visible = false;
+    }
   }
 }
 
