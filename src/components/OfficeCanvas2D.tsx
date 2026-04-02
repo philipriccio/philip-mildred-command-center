@@ -568,24 +568,26 @@ function lighten(hex: string): string {
 
 // ─── Demo mode agents (used when no real agents provided) ─────────────────────
 const DEMO_AGENTS: OfficeAgent[] = [
-  { id: 'mildred', name: 'Mildred', state: 'working', taskTitle: 'Running the show', color: '#008080' },
-  { id: 'dev',     name: 'Dev',     state: 'idle',    taskTitle: null,               color: '#3b82f6' },
-  { id: 'claire',  name: 'Claire',  state: 'idle',    taskTitle: null,               color: '#9f1239' },
-  { id: 'future',  name: 'Future',  state: 'reserved', taskTitle: null,              color: '#6b7280' },
+  { id: 'main',    name: 'Mildred',  state: 'idle', taskTitle: null, color: '#008080' },
+  { id: 'dev',     name: 'Dev',      state: 'idle', taskTitle: null, color: '#808080' },
+  { id: 'claire',  name: 'Claire',   state: 'idle', taskTitle: null, color: '#800080' },
+  { id: 'janet',   name: 'Janet',    state: 'idle', taskTitle: null, color: '#8B4513' },
+  { id: 'kimi',    name: 'Kimi',     state: 'idle', taskTitle: null, color: '#2E86C1' },
+  { id: 'gpt-mini',name: 'GPT-mini', state: 'idle', taskTitle: null, color: '#27AE60' },
 ];
 
 // Automated demo scenario: cycles agents through states every few seconds
 const DEMO_SCRIPT: Array<{ delay: number; agentId: string; state: OfficeAgent['state'] }> = [
-  { delay: 1000,  agentId: 'mildred', state: 'working' },
-  { delay: 3000,  agentId: 'dev',     state: 'working' },
-  { delay: 5000,  agentId: 'claire',  state: 'working' },
-  { delay: 10000, agentId: 'dev',     state: 'blocked' },
-  { delay: 15000, agentId: 'claire',  state: 'idle' },
-  { delay: 20000, agentId: 'dev',     state: 'working' },
-  { delay: 25000, agentId: 'mildred', state: 'finished' },
-  { delay: 30000, agentId: 'dev',     state: 'finished' },
-  { delay: 35000, agentId: 'mildred', state: 'working' },
-  { delay: 38000, agentId: 'dev',     state: 'working' },
+  { delay: 1000,  agentId: 'main',   state: 'working' },
+  { delay: 3000,  agentId: 'dev',    state: 'working' },
+  { delay: 5000,  agentId: 'claire', state: 'working' },
+  { delay: 10000, agentId: 'dev',    state: 'blocked' },
+  { delay: 15000, agentId: 'claire', state: 'idle' },
+  { delay: 20000, agentId: 'dev',    state: 'working' },
+  { delay: 25000, agentId: 'main',   state: 'finished' },
+  { delay: 30000, agentId: 'dev',    state: 'finished' },
+  { delay: 35000, agentId: 'main',   state: 'working' },
+  { delay: 38000, agentId: 'dev',    state: 'working' },
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────

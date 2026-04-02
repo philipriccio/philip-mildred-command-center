@@ -397,11 +397,45 @@ for (const lane of defaultLanes) {
   insertLane.run(lane.id, lane.name, lane.color, lane.description);
 }
 
+// Agent desk positions in the pixel art office grid
+const AGENT_DESK_POSITIONS: Record<string, { x: number; y: number }> = {
+  main:      { x: 18, y: 4 },   // Mildred's desk (top-right)
+  dev:       { x: 3,  y: 4 },   // Dev's desk (top-left)
+  claire:    { x: 3,  y: 12 },  // Claire's desk (bottom-left)
+  janet:     { x: 18, y: 12 },  // Janet's desk (bottom-right)
+  kimi:      { x: 10, y: 4 },   // Kimi's desk (top-center)
+  'gpt-mini': { x: 10, y: 12 }, // GPT-mini's desk (bottom-center)
+};
+
+const AGENT_COLORS: Record<string, string> = {
+  main: '#008080',
+  dev: '#808080',
+  claire: '#800080',
+  janet: '#8B4513',
+  kimi: '#2E86C1',
+  'gpt-mini': '#27AE60',
+};
+
+const AGENT_DISPLAY_NAMES: Record<string, string> = {
+  main: 'Mildred',
+  dev: 'Dev',
+  claire: 'Claire',
+  janet: 'Janet',
+  kimi: 'Kimi',
+  'gpt-mini': 'GPT-mini',
+};
+
+// Clean up legacy hardcoded agents that don't match gateway IDs
+for (const legacyId of ['mildred', 'content', 'research']) {
+  db.prepare('DELETE FROM office_agents WHERE id = ?').run(legacyId);
+}
+
+// Default agents — these are the real gateway agent IDs
 const officeDefaultAgents = [
-  { id: 'mildred', name: 'Mildred', position_x: 18, position_y: 4, state: 'idle', color: '#008080' },
+  { id: 'main', name: 'Mildred', position_x: 18, position_y: 4, state: 'idle', color: '#008080' },
   { id: 'dev', name: 'Dev', position_x: 3, position_y: 4, state: 'idle', color: '#808080' },
-  { id: 'content', name: 'Content', position_x: 3, position_y: 12, state: 'idle', color: '#800080' },
-  { id: 'research', name: 'Research', position_x: 18, position_y: 12, state: 'idle', color: '#8B4513' },
+  { id: 'claire', name: 'Claire', position_x: 3, position_y: 12, state: 'idle', color: '#800080' },
+  { id: 'janet', name: 'Janet', position_x: 18, position_y: 12, state: 'idle', color: '#8B4513' },
 ] as const;
 
 const insertOfficeAgent = db.prepare(`
@@ -1397,6 +1431,32 @@ function initGateway() {
 
   gateway = new GatewayClient(GATEWAY_WS_URL, gatewayToken);
 
+  // Sync office_agents table from gateway snapshot on connect
+  const syncOfficeAgentsFromGateway = () => {
+    const snapshot = gateway?.getSnapshot();
+    const agents = snapshot?.health?.agents;
+    if (!agents) return;
+
+    let nextDeskIdx = 0;
+    const defaultPositions = [
+      { x: 18, y: 4 }, { x: 3, y: 4 }, { x: 3, y: 12 },
+      { x: 18, y: 12 }, { x: 10, y: 4 }, { x: 10, y: 12 },
+    ];
+
+    for (const agent of agents) {
+      const id = agent.agentId;
+      const existing = selectOfficeAgentById.get(id) as OfficeAgentRow | undefined;
+      if (existing) continue; // Don't overwrite manually-positioned agents
+
+      const pos = AGENT_DESK_POSITIONS[id] ?? defaultPositions[nextDeskIdx++ % defaultPositions.length];
+      const name = AGENT_DISPLAY_NAMES[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+      const color = AGENT_COLORS[id] ?? '#666666';
+
+      insertOfficeAgent.run(id, name, pos.x, pos.y, 'idle', color);
+      console.log(`[GatewaySync] Added office agent: ${name} (${id})`);
+    }
+  };
+
   gateway.onStatus((status, error) => {
     const connected = status === 'connected' ? 1 : 0;
     db.prepare('UPDATE status SET gateway_connected = ?, last_update = ? WHERE id = 1').run(connected, Date.now());
@@ -1406,6 +1466,7 @@ function initGateway() {
 
     if (status === 'connected') {
       console.log('[GatewayIntegration] ✓ Connected to OpenClaw gateway');
+      syncOfficeAgentsFromGateway();
     } else if (status === 'error') {
       console.error(`[GatewayIntegration] Connection error: ${error}`);
     }

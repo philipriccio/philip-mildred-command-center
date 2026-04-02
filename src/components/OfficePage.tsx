@@ -323,8 +323,9 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
     });
   }, [agents, pendingReports, taskByAgent]);
 
-  const activeCount = desks.filter((desk) => desk.agent.state === 'working').length;
-  const blockedCount = desks.filter((desk) => desk.agent.state === 'blocked').length;
+  // Use real agent data for stats (not the old desk config)
+  const activeCount = agents.filter((a) => a.state === 'working').length;
+  const blockedCount = agents.filter((a) => a.state === 'blocked').length;
 
   const openAgentDetail = async (agentId: string) => {
     const task = taskByAgent.get(agentId);
