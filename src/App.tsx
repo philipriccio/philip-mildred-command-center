@@ -60,27 +60,19 @@ function App() {
   const [prUrl, setPrUrl] = useState('');
   const [prOwner, setPrOwner] = useState('');
   const [prRepo, setPrRepo] = useState('');
-  const [notifications] = useState<NotificationToastItem[]>([
-    {
-      id: 'cron-failure',
-      title: 'Cron job failed',
-      body: 'Surface scheduler failures here so Mildred can intervene quickly.',
-      tone: 'red',
-    },
-    {
-      id: 'agent-offline',
-      title: 'Agent offline',
-      body: 'Offline agent alerts will stack here when a worker drops connection.',
-      tone: 'amber',
-    },
-    {
-      id: 'task-verification',
-      title: 'Task moved to verification',
-      body: 'Verification-ready task alerts will appear here for final review.',
-      tone: 'purple',
-    },
-  ]);
+  const [notifications, setNotifications] = useState<NotificationToastItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const notificationsRef = useRef<typeof setNotifications>(setNotifications);
+  notificationsRef.current = setNotifications;
+
+  const pushNotification = useCallback((title: string, body: string, tone: NotificationToastItem['tone']) => {
+    const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const setter = notificationsRef.current;
+    setter((prev: NotificationToastItem[]) => [...prev.slice(-4), { id, title, body, tone }]);
+    setTimeout(() => {
+      setter((prev: NotificationToastItem[]) => prev.filter((n: NotificationToastItem) => n.id !== id));
+    }, 8000);
+  }, []);
 
   const loadTaskDetail = useCallback(async (taskId: string) => {
     const response = await fetch(`${API_BASE}/api/tasks/${taskId}`);
@@ -125,7 +117,7 @@ function App() {
       ws.send(JSON.stringify({ type: 'subscribe', topics: ['gateway'] }));
     };
     ws.onclose = () => setConnected(false);
-    ws.onmessage = () => {
+    ws.onmessage = (e) => {
       void fetchAll().catch(console.error);
       if (detailTask?.id) {
         void loadTaskDetail(detailTask.id).then(setDetailTask).catch(console.error);
@@ -133,6 +125,25 @@ function App() {
       if (editingTask?.id) {
         void loadTaskDetail(editingTask.id).then(setEditingTask).catch(console.error);
       }
+      // Parse events for notifications
+      try {
+        const msg = JSON.parse(e.data as string) as Record<string, unknown>;
+        const data = (msg.data ?? {}) as Record<string, unknown>;
+        if (msg.type === 'gateway.agent.event') {
+          const status = data.status as string | undefined;
+          const agentId = data.agentId as string | undefined;
+          if (status === 'error' && agentId) {
+            pushNotification('Agent error', `${agentId} encountered an error`, 'red');
+          }
+        }
+        if (msg.type === 'task.moved') {
+          const taskTitle = (data.title as string | undefined) ?? 'A task';
+          const newStatus = data.status as string | undefined;
+          if (newStatus === 'verification') {
+            pushNotification('Ready for review', `${taskTitle} moved to verification`, 'purple');
+          }
+        }
+      } catch { /* ignore parse errors */ }
     };
     return () => ws.close();
   }, [detailTask?.id, editingTask?.id, fetchAll, loadTaskDetail]);
@@ -559,7 +570,7 @@ function App() {
         {viewMode === 'office' && <OfficePage apiBase={API_BASE} wsUrl={`${WS_BASE}/ws`} />}
       </main>
 
-      <NotificationToast notifications={viewMode === 'dashboard' ? notifications : []} />
+      <NotificationToast notifications={notifications} onDismiss={(id) => setNotifications((prev) => prev.filter((n) => n.id !== id))} />
 
       {showComposer && (
         <TaskComposer
