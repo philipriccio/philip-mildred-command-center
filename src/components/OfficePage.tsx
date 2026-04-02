@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { OFFICE_SCENE_CONFIG, OFFICE_SCENE_DESK_ORDER } from '../officeSceneConfig';
 import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
+import { AgentDetailDrawer } from './AgentDetailDrawer';
 import { ReportsPanel } from './ReportsPanel';
 
 type AgentStateSnapshot = {
@@ -161,6 +162,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
   const [connected, setConnected] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState<TaskDetail | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [usingFallbackData, setUsingFallbackData] = useState(false);
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -334,19 +336,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
   const blockedCount = agents.filter((a) => a.state === 'blocked').length;
 
   const openAgentDetail = async (agentId: string) => {
-    const task = taskByAgent.get(agentId);
-    if (!task) return;
-    if (usingFallbackData && task.id.startsWith('fallback-')) {
-      setSelectedDetail({
-        ...task,
-        delivery_notes: task.id === 'fallback-dev-active' ? 'Master scene implementation is using configured anchors and lightweight overlays.' : null,
-        office_report: null,
-        history: [],
-      });
-      return;
-    }
-    const response = await fetch(`${apiBase}/api/tasks/${task.id}`);
-    setSelectedDetail(await response.json());
+    setSelectedAgentId(agentId);
   };
 
   const acknowledgeReport = async (reportId: string) => {
@@ -422,6 +412,13 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
 
       {selectedDetail && (
         <TaskDetailSheet detail={selectedDetail} onClose={() => setSelectedDetail(null)} />
+      )}
+      {selectedAgentId && (
+        <AgentDetailDrawer
+          agentId={selectedAgentId}
+          apiBase={apiBase}
+          onClose={() => setSelectedAgentId(null)}
+        />
       )}
     </div>
   );
