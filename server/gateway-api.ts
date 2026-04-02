@@ -38,7 +38,6 @@ export function registerGatewayApiRoutes(
       }
       const params: Record<string, unknown> = {};
       if (req.query.activeMinutes) params.activeMinutes = Number(req.query.activeMinutes);
-      if (req.query.messageLimit) params.messageLimit = Number(req.query.messageLimit);
       if (req.query.limit) params.limit = Number(req.query.limit);
       const data = await gw.request('sessions.list', params);
       res.json(data);
@@ -59,7 +58,6 @@ export function registerGatewayApiRoutes(
       const data = await gw.request('sessions.list', {
         activeMinutes: 1440, // last 24 hours
         limit: 100,
-        messageLimit: 0,
       }) as { sessions?: Array<Record<string, unknown>> };
 
       // Extract usage info from sessions

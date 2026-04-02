@@ -66,7 +66,7 @@ export function SessionsPanel({ apiBase }: { apiBase: string }) {
 
   const fetchSessions = async () => {
     try {
-      const params = filter === 'recent' ? '?activeMinutes=60&messageLimit=1' : '?messageLimit=1';
+      const params = filter === 'recent' ? '?activeMinutes=60' : '';
       const res = await fetch(`${apiBase}/api/sessions${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
