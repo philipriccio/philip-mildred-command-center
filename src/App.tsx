@@ -6,6 +6,7 @@ import { CostTracker } from './components/CostTracker';
 import { CronPanel } from './components/CronPanel';
 import { NotificationToast, type NotificationToastItem } from './components/NotificationToast';
 import { OfficePage } from './components/OfficePage';
+import { ProjectsPage } from './components/ProjectsPage';
 import { QuickCommand } from './components/QuickCommand';
 import { SessionsPanel } from './components/SessionsPanel';
 import { SiteHealthPanel } from './components/SiteHealthPanel';
@@ -347,7 +348,7 @@ function App() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex rounded-xl border border-slate-800 bg-slate-900 p-1 text-sm">
-              {(['office', 'dashboard', 'board'] as ViewMode[]).map((mode) => (
+              {(['office', 'dashboard', 'board', 'projects'] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -568,6 +569,7 @@ function App() {
         )}
 
         {viewMode === 'office' && <OfficePage apiBase={API_BASE} wsUrl={`${WS_BASE}/ws`} />}
+        {viewMode === 'projects' && <ProjectsPage apiBase={API_BASE} />}
       </main>
 
       <NotificationToast notifications={notifications} onDismiss={(id) => setNotifications((prev) => prev.filter((n) => n.id !== id))} />
