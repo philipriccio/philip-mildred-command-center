@@ -17,13 +17,13 @@ interface OfficeCanvas2DProps {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const W = 900;
-const H = 520;
+const H = 580;
 const WALK_SPEED = 120; // px/sec
 
 // Room layout zones
 const ROOM_TOP = 8;     // top of rooms area
 const ROOM_H = 140;     // height of rooms
-const WORK_TOP = ROOM_TOP + ROOM_H + 16; // where desks start
+const WORK_TOP = ROOM_TOP + ROOM_H + 50; // extra gap between rooms and desks
 const STATUS_H = 50;
 
 // Colors — clean, minimal
@@ -299,21 +299,33 @@ function drawFloor(ctx: CanvasRenderingContext2D, inboxCount: number) {
 
   // ─── Philip's Office (top-left) ────────────────────────────
   const o = OFFICE;
+  const oDoorW = 36;
+  const oDoorX = o.x + o.w / 2 - oDoorW / 2; // centered on bottom wall
   // Floor
   ctx.fillStyle = C.officeFloor;
   ctx.fillRect(o.x, o.y, o.w, o.h);
-  // Walls
+  // Walls with door opening on bottom
   ctx.strokeStyle = C.officeWall;
   ctx.lineWidth = 3;
-  ctx.strokeRect(o.x, o.y, o.w, o.h);
+  // Top wall
+  ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x + o.w, o.y); ctx.stroke();
+  // Left wall
+  ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x, o.y + o.h); ctx.stroke();
+  // Right wall
+  ctx.beginPath(); ctx.moveTo(o.x + o.w, o.y); ctx.lineTo(o.x + o.w, o.y + o.h); ctx.stroke();
+  // Bottom wall — two segments with gap for door
+  ctx.beginPath(); ctx.moveTo(o.x, o.y + o.h); ctx.lineTo(oDoorX, o.y + o.h); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(oDoorX + oDoorW, o.y + o.h); ctx.lineTo(o.x + o.w, o.y + o.h); ctx.stroke();
+  // Door frame + label
+  ctx.fillStyle = C.door;
+  ctx.fillRect(oDoorX, o.y + o.h - 3, oDoorW, 6);
+  ctx.fillStyle = C.ctGold;
+  ctx.font = '10px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('⭐', oDoorX + oDoorW / 2, o.y + o.h + 14);
   // Red accent wall (left)
   ctx.fillStyle = C.ctRed;
   ctx.fillRect(o.x, o.y, 4, o.h);
-  // Star on door (right wall opening)
-  ctx.fillStyle = C.ctGold;
-  ctx.font = '18px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('⭐', o.x + o.w - 14, o.y + o.h / 2 + 6);
   // Label
   ctx.fillStyle = C.officeWall;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
@@ -376,13 +388,30 @@ function drawFloor(ctx: CanvasRenderingContext2D, inboxCount: number) {
 
   // ─── Green Room / Lounge (top-right) ───────────────────────
   const g = GREEN_ROOM;
+  const gDoorW = 40;
+  const gDoorX = g.x + g.w / 2 - gDoorW / 2; // centered on bottom wall
   // Floor
   ctx.fillStyle = C.greenRoomFloor;
   ctx.fillRect(g.x, g.y, g.w, g.h);
-  // Walls
+  // Walls with door opening on bottom
   ctx.strokeStyle = C.greenRoomWall;
   ctx.lineWidth = 3;
-  ctx.strokeRect(g.x, g.y, g.w, g.h);
+  // Top wall
+  ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.x + g.w, g.y); ctx.stroke();
+  // Left wall
+  ctx.beginPath(); ctx.moveTo(g.x, g.y); ctx.lineTo(g.x, g.y + g.h); ctx.stroke();
+  // Right wall
+  ctx.beginPath(); ctx.moveTo(g.x + g.w, g.y); ctx.lineTo(g.x + g.w, g.y + g.h); ctx.stroke();
+  // Bottom wall — two segments with gap for door
+  ctx.beginPath(); ctx.moveTo(g.x, g.y + g.h); ctx.lineTo(gDoorX, g.y + g.h); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(gDoorX + gDoorW, g.y + g.h); ctx.lineTo(g.x + g.w, g.y + g.h); ctx.stroke();
+  // Door frame
+  ctx.fillStyle = C.greenRoomWall;
+  ctx.fillRect(gDoorX, g.y + g.h - 3, gDoorW, 6);
+  ctx.fillStyle = '#22c55e';
+  ctx.font = '9px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('GREEN ROOM', gDoorX + gDoorW / 2, g.y + g.h + 14);
   // Label with vanity lights
   ctx.fillStyle = C.greenRoomWall;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
