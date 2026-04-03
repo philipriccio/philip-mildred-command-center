@@ -19,7 +19,7 @@ const H = 720;
 const FLOOR_TILE = 32;
 const WALK_SPEED = 90; // px/sec
 
-// Colors
+// Colors — Company Theatre palette
 const C = {
   floorA: '#0f172a',
   floorB: '#131e2e',
@@ -38,14 +38,18 @@ const C = {
   textBright: '#e2e8f0',
   statusBar: '#0a0f1e',
   statusBorder: '#1e293b',
+  ctRed: '#b91c1c',        // Company Theatre red
+  ctGold: '#fbbf24',       // accent gold
+  spotlightYellow: '#fde68a',
+  curtainRed: '#7f1d1d',
 };
 
 // ─── Room / furniture layout ──────────────────────────────────────────────────
 const ROOMS = {
-  conference: { x: 20, y: 20, w: 210, h: 140, label: 'Conference' },
+  conference: { x: 20, y: 20, w: 210, h: 140, label: 'The Green Room' },
   philipOffice: { x: 250, y: 20, w: 210, h: 140, label: "Philip's Office" },
   kitchen:      { x: 480, y: 20, w: 180, h: 140, label: 'Kitchen' },
-  lounge:       { x: 900, y: 170, w: 180, h: 380, label: 'Lounge' },
+  lounge:       { x: 900, y: 170, w: 180, h: 380, label: 'Backstage' },
 };
 
 const DOOR = { x: W / 2 - 20, y: 665, w: 40, h: 14 };
@@ -66,6 +70,15 @@ const WP = {
   hubLeft: { x: 300, y: 500 },
   kitchen: { x: 560, y: 100 },
   lounge:  { x: 940, y: 380 },
+};
+
+// Agent personality icons
+const AGENT_ICONS: Record<string, string> = {
+  main: '🎧',        // Mildred — headset (chief of staff)
+  dev: '{ }',        // Dev — code brackets
+  janet: '✉️',       // Janet — envelope (email)
+  kimi: '🌙',        // Kimi — crescent moon (Moonshot)
+  'gpt-mini': '⚡',  // GPT-mini — lightning bolt (fast)
 };
 
 // ─── Agent runtime state ──────────────────────────────────────────────────────
@@ -218,6 +231,29 @@ function drawFloor(ctx: CanvasRenderingContext2D) {
       ctx.fillRect(col * FLOOR_TILE, row * FLOOR_TILE, FLOOR_TILE, FLOOR_TILE);
     }
   }
+
+  // CT logo watermark on the floor (center of workspace area)
+  ctx.save();
+  ctx.globalAlpha = 0.06;
+  ctx.fillStyle = C.ctRed;
+  ctx.font = 'bold 120px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('CT', W / 2, 520);
+  ctx.restore();
+
+  // Stage curtain valance at the very top
+  ctx.fillStyle = C.curtainRed;
+  ctx.fillRect(0, 0, W, 6);
+  ctx.fillStyle = '#5a1515';
+  // Scalloped edge
+  for (let i = 0; i < W / 20; i++) {
+    ctx.beginPath();
+    ctx.arc(i * 20 + 10, 6, 8, 0, Math.PI, false);
+    ctx.fill();
+  }
+  // Gold trim
+  ctx.fillStyle = 'rgba(251,191,36,0.3)';
+  ctx.fillRect(0, 0, W, 2);
 }
 
 function drawRoom(ctx: CanvasRenderingContext2D, room: typeof ROOMS.conference) {
@@ -266,99 +302,228 @@ function drawDoor(ctx: CanvasRenderingContext2D) {
   ctx.fillStyle = C.textBright;
   ctx.font = '10px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('EXIT / ENTER', DOOR.x + DOOR.w / 2, DOOR.y - 4);
+  ctx.fillText('🎭 STAGE DOOR', DOOR.x + DOOR.w / 2, DOOR.y - 4);
 }
 
 function drawLounge(ctx: CanvasRenderingContext2D) {
   const r = ROOMS.lounge;
-  ctx.fillStyle = C.lounge;
+  ctx.fillStyle = '#1a0a0a';
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = C.roomBorder;
+  ctx.strokeStyle = '#4d1a1a';
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = C.textBright;
+
+  // Curtain drapes on left and right walls
+  for (let i = 0; i < 12; i++) {
+    const wave = Math.sin(i * 0.8) * 3;
+    ctx.fillStyle = i % 2 === 0 ? C.curtainRed : '#5a1515';
+    ctx.fillRect(r.x + 2 + wave, r.y + 20 + i * 30, 12, 30);
+    ctx.fillRect(r.x + r.w - 14 + wave, r.y + 20 + i * 30, 12, 30);
+  }
+
+  ctx.fillStyle = C.ctGold;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(r.label, r.x + r.w / 2, r.y + 16);
 
-  // Couch
-  ctx.fillStyle = '#312e81';
-  ctx.fillRect(r.x + 15, r.y + 30, 150, 50);
-  // Coffee table
+  // Star on the door
+  ctx.font = '14px sans-serif';
+  ctx.fillText('⭐', r.x + r.w / 2 - 7, r.y + 34);
+
+  // Vintage couch (velvet red)
+  ctx.fillStyle = '#7f1d1d';
+  ctx.fillRect(r.x + 20, r.y + 50, 140, 45);
+  ctx.fillStyle = '#991b1b';
+  ctx.fillRect(r.x + 22, r.y + 52, 136, 20); // cushion highlight
+
+  // Coffee table with scripts
   ctx.fillStyle = '#1e293b';
-  ctx.fillRect(r.x + 40, r.y + 95, 80, 35);
-  // Bean bag
-  ctx.fillStyle = '#4c1d95';
-  ctx.beginPath();
-  ctx.ellipse(r.x + 50, r.y + 180, 28, 22, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Water cooler
-  ctx.fillStyle = '#0ea5e9';
-  ctx.fillRect(r.x + 130, r.y + 150, 20, 40);
-  ctx.fillStyle = '#bae6fd';
-  ctx.fillRect(r.x + 132, r.y + 152, 16, 20);
+  ctx.fillRect(r.x + 40, r.y + 110, 80, 35);
+  // Scripts on the table
+  ctx.fillStyle = '#f5f0e0';
+  ctx.fillRect(r.x + 50, r.y + 118, 16, 22);
+  ctx.fillRect(r.x + 70, r.y + 116, 16, 22);
+  ctx.fillStyle = '#94a3b8';
+  for (let i = 0; i < 3; i++) {
+    ctx.fillRect(r.x + 52, r.y + 122 + i * 5, 12, 1);
+  }
+
+  // Props rack (costumes/hats)
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(r.x + 25, r.y + 160, 130, 4); // rack bar
+  ctx.fillRect(r.x + 30, r.y + 160, 3, 30);   // left post
+  ctx.fillRect(r.x + 152, r.y + 160, 3, 30);  // right post
+  // Hanging costumes
+  const costumeColors = ['#dc2626', '#2563eb', '#15803d', '#7c3aed', C.ctGold];
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = costumeColors[i];
+    ctx.fillRect(r.x + 40 + i * 24, r.y + 165, 14, 24);
+  }
+
+  // Prop trunk
+  ctx.fillStyle = '#5a3a1a';
+  ctx.fillRect(r.x + 30, r.y + 220, 80, 40);
+  ctx.strokeStyle = '#92400e';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(r.x + 30, r.y + 220, 80, 40);
+  ctx.fillStyle = C.ctGold;
+  ctx.fillRect(r.x + 65, r.y + 235, 10, 10); // latch
+
+  // Theatre masks on the wall — 🎭
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('🎭', r.x + r.w / 2, r.y + 300);
+
+  // "THE COMPANY THEATRE" small plaque
+  ctx.fillStyle = C.ctRed;
+  ctx.fillRect(r.x + 20, r.y + r.h - 40, 140, 22);
+  ctx.fillStyle = C.ctGold;
+  ctx.font = 'bold 8px "JetBrains Mono", monospace';
+  ctx.fillText('THE COMPANY THEATRE', r.x + r.w / 2, r.y + r.h - 25);
 }
 
 function drawConferenceRoom(ctx: CanvasRenderingContext2D) {
   const r = ROOMS.conference;
-  ctx.fillStyle = C.roomFill;
+  // Dark backstage-green walls
+  ctx.fillStyle = '#0a1a14';
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = C.roomBorder;
+  ctx.strokeStyle = '#2d5a40';
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = C.textBright;
+  ctx.fillStyle = C.ctGold;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(r.label, r.x + r.w / 2, r.y + 16);
-  // Round table
-  ctx.fillStyle = '#1e3a5f';
-  ctx.beginPath();
-  ctx.ellipse(r.x + r.w / 2, r.y + 85, 60, 40, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = '#2563eb';
+
+  // Vanity mirror (long rectangle on back wall)
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(r.x + 30, r.y + 28, 150, 40);
+  ctx.strokeStyle = C.ctGold;
   ctx.lineWidth = 1.5;
-  ctx.stroke();
-  // Chairs around table
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2;
-    const cx = r.x + r.w / 2 + Math.cos(angle) * 68;
-    const cy = r.y + 85 + Math.sin(angle) * 48;
-    ctx.fillStyle = C.chair;
-    ctx.fillRect(cx - 8, cy - 8, 16, 16);
+  ctx.strokeRect(r.x + 30, r.y + 28, 150, 40);
+  // Mirror reflection shimmer
+  ctx.fillStyle = 'rgba(255,255,255,0.06)';
+  ctx.fillRect(r.x + 35, r.y + 32, 60, 32);
+
+  // Vanity light bulbs across the top of the mirror
+  for (let i = 0; i < 7; i++) {
+    const bx = r.x + 42 + i * 22;
+    const by = r.y + 24;
+    ctx.fillStyle = C.spotlightYellow;
+    ctx.beginPath();
+    ctx.arc(bx, by, 4, 0, Math.PI * 2);
+    ctx.fill();
+    // Glow
+    ctx.fillStyle = 'rgba(253,230,138,0.15)';
+    ctx.beginPath();
+    ctx.arc(bx, by, 8, 0, Math.PI * 2);
+    ctx.fill();
   }
+
+  // Makeup counter / shelf below mirror
+  ctx.fillStyle = '#1a3d2a';
+  ctx.fillRect(r.x + 30, r.y + 70, 150, 15);
+
+  // Directors chairs (classic X-frame style)
+  for (let i = 0; i < 3; i++) {
+    const cx = r.x + 55 + i * 50;
+    const cy = r.y + 110;
+    // Chair back (canvas fabric)
+    ctx.fillStyle = C.ctRed;
+    ctx.fillRect(cx - 10, cy - 12, 20, 8);
+    // Frame (X shape simplified)
+    ctx.strokeStyle = '#92400e';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 8, cy - 4);
+    ctx.lineTo(cx + 8, cy + 12);
+    ctx.moveTo(cx + 8, cy - 4);
+    ctx.lineTo(cx - 8, cy + 12);
+    ctx.stroke();
+    // Seat
+    ctx.fillStyle = C.ctRed;
+    ctx.fillRect(cx - 8, cy + 2, 16, 5);
+  }
+
+  // Theatre masks on right wall — 🎭
+  ctx.font = '20px sans-serif';
+  ctx.fillText('🎭', r.x + r.w - 30, r.y + 90);
 }
 
 function drawPhilipOffice(ctx: CanvasRenderingContext2D) {
   const r = ROOMS.philipOffice;
-  ctx.fillStyle = '#0d1a0d';
+  // Deep red accent wall
+  ctx.fillStyle = '#1a0a0a';
   ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = '#1a4d1a';
+  // Red accent on back wall
+  ctx.fillStyle = C.curtainRed;
+  ctx.fillRect(r.x + 2, r.y + 2, r.w - 4, 20);
+  ctx.strokeStyle = '#4d1a1a';
   ctx.lineWidth = 2;
   ctx.strokeRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = '#fbbf24';
+  ctx.fillStyle = C.ctGold;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.fillText("Philip's Office", r.x + r.w / 2, r.y + 16);
-  // Executive desk
-  ctx.fillStyle = '#1a3d1a';
+
+  // Executive desk (dark mahogany)
+  ctx.fillStyle = '#2d1a0a';
   ctx.fillRect(r.x + 40, r.y + 40, 130, 60);
-  ctx.strokeStyle = '#2d6a2d';
+  ctx.strokeStyle = '#5a3a1a';
   ctx.lineWidth = 1.5;
   ctx.strokeRect(r.x + 40, r.y + 40, 130, 60);
-  // Bookshelf
-  ctx.fillStyle = '#1e1a0a';
-  ctx.fillRect(r.x + 10, r.y + 30, 20, 100);
-  for (let i = 0; i < 5; i++) {
-    ctx.fillStyle = `hsl(${30 + i * 20}, 60%, 35%)`;
-    ctx.fillRect(r.x + 12, r.y + 35 + i * 18, 16, 14);
+
+  // Scripts/papers on desk
+  ctx.fillStyle = '#f5f0e0';
+  ctx.fillRect(r.x + 50, r.y + 50, 24, 32);
+  ctx.fillRect(r.x + 78, r.y + 48, 24, 32);
+  // Script text lines
+  ctx.fillStyle = '#94a3b8';
+  for (let i = 0; i < 4; i++) {
+    ctx.fillRect(r.x + 53, r.y + 55 + i * 6, 18, 1);
+    ctx.fillRect(r.x + 81, r.y + 53 + i * 6, 18, 1);
   }
-  // Couch
-  ctx.fillStyle = '#3b1f0a';
-  ctx.fillRect(r.x + 30, r.y + 110, 140, 24);
-  // Lock icon
-  ctx.fillStyle = '#fbbf24';
-  ctx.font = '16px sans-serif';
-  ctx.fillText('🔒', r.x + r.w / 2 - 8, r.y + r.h - 10);
+  // Red pen
+  ctx.fillStyle = '#dc2626';
+  ctx.fillRect(r.x + 108, r.y + 55, 3, 20);
+
+  // Spotlight lamp (floor standing, left side)
+  ctx.fillStyle = '#374151';
+  ctx.fillRect(r.x + 14, r.y + 90, 4, 40);     // Stand
+  ctx.fillStyle = '#1c1917';
+  ctx.fillRect(r.x + 10, r.y + 130, 12, 4);     // Base
+  ctx.fillStyle = C.spotlightYellow;
+  ctx.beginPath();
+  ctx.moveTo(r.x + 8, r.y + 90);
+  ctx.lineTo(r.x + 24, r.y + 90);
+  ctx.lineTo(r.x + 16, r.y + 78);
+  ctx.closePath();
+  ctx.fill();
+  // Spotlight glow
+  ctx.fillStyle = 'rgba(253,230,138,0.08)';
+  ctx.beginPath();
+  ctx.arc(r.x + 16, r.y + 86, 20, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Director's chair (right side)
+  const cx = r.x + r.w - 40;
+  const cy = r.y + 100;
+  ctx.fillStyle = C.ctRed;
+  ctx.fillRect(cx - 12, cy - 14, 24, 8);         // Back canvas
+  ctx.strokeStyle = '#92400e';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 10, cy - 6);
+  ctx.lineTo(cx + 10, cy + 14);
+  ctx.moveTo(cx + 10, cy - 6);
+  ctx.lineTo(cx - 10, cy + 14);
+  ctx.stroke();
+  ctx.fillStyle = C.ctRed;
+  ctx.fillRect(cx - 10, cy + 2, 20, 5);           // Seat
+
+  // Star on the door ⭐
+  ctx.font = '14px sans-serif';
+  ctx.fillText('⭐', r.x + r.w / 2 - 7, r.y + r.h - 8);
 }
 
 function drawKitchen(ctx: CanvasRenderingContext2D) {
@@ -388,6 +553,13 @@ function drawKitchen(ctx: CanvasRenderingContext2D) {
   ctx.beginPath();
   ctx.arc(r.x + 125, r.y + 80, 12, 0, Math.PI * 2);
   ctx.fill();
+  // "BREAK A LEG" sign on the wall
+  ctx.fillStyle = C.ctRed;
+  ctx.fillRect(r.x + 60, r.y + 120, 110, 18);
+  ctx.fillStyle = C.ctGold;
+  ctx.font = 'bold 9px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('BREAK A LEG ☕', r.x + 115, r.y + 133);
 }
 
 function drawPlants(ctx: CanvasRenderingContext2D) {
@@ -486,14 +658,61 @@ function drawCharacter(
     ctx.fillRect(x + 1 * scale, y - 12 * scale + yOff, 2 * scale, 2 * scale);
   }
 
-  // Blocked badge
+  // Blocked badge — red exclamation bubble
   if (r.state === 'blocked') {
-    ctx.fillStyle = '#f59e0b';
-    ctx.fillRect(x + 6 * scale, y - 18 * scale, 12, 12);
-    ctx.fillStyle = '#1c1917';
-    ctx.font = 'bold 10px sans-serif';
+    ctx.fillStyle = '#dc2626';
+    const bx = x + 8 * scale;
+    const by = y - 20 * scale;
+    // Speech bubble
+    ctx.beginPath();
+    ctx.arc(bx, by, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fef2f2';
+    ctx.font = 'bold 12px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('!', x + 6 * scale + 6, y - 18 * scale + 10);
+    ctx.fillText('!', bx, by + 4);
+  }
+
+  // Agent personality icon (above head when sitting/working)
+  if (sitting) {
+    const iconY = y - 26 * scale;
+    ctx.font = '12px sans-serif';
+    ctx.textAlign = 'center';
+    const icon = AGENT_ICONS[r.id];
+    if (icon) ctx.fillText(icon, x, iconY);
+
+    // Typing sparks — small pixel particles near desk when working
+    if (r.state === 'working') {
+      const t = r.sittingTimer;
+      for (let i = 0; i < 3; i++) {
+        const sx = x - 10 + Math.sin(t * 6 + i * 2.1) * 12;
+        const sy = y + 2 * scale - Math.abs(Math.sin(t * 8 + i * 1.7)) * 8;
+        const sparkAlpha = 0.3 + Math.sin(t * 10 + i * 3) * 0.3;
+        ctx.fillStyle = `rgba(14,165,233,${sparkAlpha})`;
+        ctx.fillRect(sx, sy, 2, 2);
+      }
+    }
+
+    // Coffee mug on desk (steams when active)
+    const desk = DESKS[r.id];
+    if (desk) {
+      const mx = desk.deskX + 68;
+      const my = desk.deskY + 8;
+      ctx.fillStyle = '#f5f0e0';
+      ctx.fillRect(mx, my, 8, 10);
+      ctx.fillStyle = '#92400e';
+      ctx.fillRect(mx + 8, my + 2, 3, 6); // handle
+      if (r.state === 'working') {
+        // Steam
+        const st = r.sittingTimer;
+        for (let i = 0; i < 2; i++) {
+          const steamX = mx + 2 + Math.sin(st * 3 + i * 2) * 3;
+          const steamY = my - 4 - i * 5;
+          ctx.fillStyle = `rgba(148,163,184,${0.3 - i * 0.1})`;
+          ctx.fillRect(steamX, steamY, 2, 3);
+        }
+      }
+    }
   }
 
   // Name tag
