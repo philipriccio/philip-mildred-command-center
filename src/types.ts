@@ -1,6 +1,6 @@
 import type { StatusId } from './components/ui';
 
-export type ViewMode = 'office' | 'dashboard' | 'board';
+export type ViewMode = 'office' | 'dashboard' | 'board' | 'projects';
 
 export interface Agent {
   id: string;
@@ -163,3 +163,75 @@ export const EMPTY_DRAFT: TaskDraft = {
   source: 'telegram',
   requester: 'Philip',
 };
+
+export type WorkItemStatus = 'todo' | 'in_progress' | 'done' | 'blocked';
+
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  repo_url: string | null;
+  live_url: string | null;
+  local_path: string | null;
+  description: string | null;
+  created_at: number;
+  updated_at: number;
+  open_work_items_count: number;
+  work_items_count: number;
+}
+
+export interface WorkItem {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  status: WorkItemStatus;
+  assigned_agent: string | null;
+  blocker_reason: string | null;
+  created_at: number;
+  updated_at: number;
+  completed_at: number | null;
+}
+
+export interface CronJob {
+  id: string;
+  name: string;
+  enabled: boolean;
+  schedule: {
+    kind: string;
+    expr?: string;
+    tz?: string;
+    everyMs?: number;
+    at?: string;
+  };
+  state?: {
+    nextRunAtMs?: number;
+    lastRunAtMs?: number;
+    lastRunStatus?: string;
+    lastStatus?: string;
+    lastDurationMs?: number;
+    consecutiveErrors?: number;
+    lastError?: string;
+    lastErrorReason?: string;
+    lastDelivered?: boolean;
+    lastDeliveryStatus?: string;
+  };
+}
+
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  repo_url: string | null;
+  live_url: string | null;
+  local_path: string | null;
+  description: string | null;
+  created_at: number;
+  updated_at: number;
+  work_items: WorkItem[];
+  cron_job_ids: string[];
+  cron_jobs: CronJob[];
+}
