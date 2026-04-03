@@ -103,6 +103,7 @@ interface AgentRuntime {
   animTimer: number;     // seconds since last frame flip
   sittingTimer: number;  // typing animation tick
   wanderTimer: number;   // time until next wander dest
+  lingerTimer: number;   // seconds to linger at desk after going idle (0 = leave now)
   visible: boolean;
 }
 
@@ -125,6 +126,7 @@ function makeRuntime(agent: OfficeAgent): AgentRuntime {
     animTimer: 0,
     sittingTimer: 0,
     wanderTimer: 0,
+    lingerTimer: 0,
     visible: phase !== 'gone',
   };
 }
@@ -158,6 +160,18 @@ function updateAgent(r: AgentRuntime, dt: number) {
 
   if (r.phase === 'sitting') {
     r.sittingTimer += dt;
+    // If lingering (idle at desk), count down before leaving
+    if (r.lingerTimer > 0) {
+      r.lingerTimer -= dt;
+      if (r.lingerTimer <= 0) {
+        r.lingerTimer = 0;
+        const desk = DESKS[r.id];
+        if (desk) {
+          r.phase = 'exiting';
+          r.path = [{ ...WP.hub }, { ...WP.door }];
+        }
+      }
+    }
     return;
   }
 
@@ -198,26 +212,38 @@ function updateAgent(r: AgentRuntime, dt: number) {
   }
 }
 
+const LINGER_SECONDS = 120; // Stay at desk 2 minutes after going idle
+
 function syncState(r: AgentRuntime, newState: OfficeAgent['state']) {
   if (r.state === newState) return;
   r.state = newState;
   const desk = DESKS[r.id];
 
   if (newState === 'working' || newState === 'blocked') {
-    // Agent starts working → enter the room and sit at desk
+    // Agent starts working → cancel any linger countdown, sit at desk
+    r.lingerTimer = 0;
     if (r.phase !== 'sitting' && r.phase !== 'entering') {
       r.phase = 'entering';
       r.pos = { ...WP.door };
       r.visible = true;
       r.path = desk ? buildPath(WP.door, desk) : [];
     }
+    // If they were lingering at desk (idle→working again), just stay seated
+    if (r.phase === 'sitting') {
+      // Already there, just keep sitting — linger cleared above
+    }
   } else {
-    // Agent stops working (idle, finished, offline) → leave the room
-    if (r.phase === 'sitting' || r.phase === 'entering' || r.phase === 'wandering') {
+    // Agent stops working (idle, finished, offline)
+    if (r.phase === 'sitting') {
+      // Don't leave immediately — linger at desk for a while
+      r.lingerTimer = LINGER_SECONDS;
+    } else if (r.phase === 'entering') {
+      // Was walking in — let them arrive, then linger
+      r.lingerTimer = LINGER_SECONDS;
+    } else if (r.phase === 'wandering') {
       r.phase = 'exiting';
       r.path = [{ ...WP.hub }, { ...WP.door }];
     } else if (r.phase === 'gone') {
-      // already gone, stay gone
       r.visible = false;
     }
   }
