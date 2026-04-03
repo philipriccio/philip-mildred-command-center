@@ -145,6 +145,41 @@ interface ActivityEntry {
   summary: string;
 }
 
+interface ProjectRow {
+  id: string;
+  name: string;
+  slug: string;
+  color: string;
+  repo_url: string | null;
+  live_url: string | null;
+  local_path: string | null;
+  description: string | null;
+  created_at: number;
+  updated_at: number;
+}
+
+const WORK_ITEM_STATUSES = ['todo', 'in_progress', 'done', 'blocked'] as const;
+type WorkItemStatus = (typeof WORK_ITEM_STATUSES)[number];
+
+interface WorkItemRow {
+  id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  priority: number;
+  status: WorkItemStatus;
+  assigned_agent: string | null;
+  blocker_reason: string | null;
+  created_at: number;
+  updated_at: number;
+  completed_at: number | null;
+}
+
+interface ProjectCronLinkRow {
+  project_id: string;
+  cron_job_id: string;
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -340,6 +375,41 @@ db.exec(`
     created_at INTEGER NOT NULL,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
   );
+
+  CREATE TABLE IF NOT EXISTS projects (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT NOT NULL UNIQUE,
+    color TEXT NOT NULL DEFAULT '#6366f1',
+    repo_url TEXT,
+    live_url TEXT,
+    local_path TEXT,
+    description TEXT,
+    created_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    updated_at INTEGER DEFAULT (strftime('%s','now') * 1000)
+  );
+
+  CREATE TABLE IF NOT EXISTS work_items (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    priority INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'todo' CHECK(status IN ('todo','in_progress','done','blocked')),
+    assigned_agent TEXT,
+    blocker_reason TEXT,
+    created_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    updated_at INTEGER DEFAULT (strftime('%s','now') * 1000),
+    completed_at INTEGER,
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS project_cron_links (
+    project_id TEXT NOT NULL,
+    cron_job_id TEXT NOT NULL,
+    PRIMARY KEY (project_id, cron_job_id),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  );
 `);
 
 const migrationStatements = [
@@ -408,6 +478,24 @@ for (const lane of defaultLanes) {
   insertLane.run(lane.id, lane.name, lane.color, lane.description);
 }
 
+const defaultProjects = [
+  { id: 'selftape', name: 'Self-e-Tape', slug: 'selftape', color: '#f97316', repo_url: 'https://github.com/philipriccio/SelfTapeApp', live_url: 'https://selfetape.com', local_path: '/Users/mildred/.openclaw/workspace/projects/SelfTapeApp', description: null },
+  { id: 'ct-crm', name: 'Company Theatre CRM', slug: 'ct-crm', color: '#ef4444', repo_url: 'https://github.com/philipriccio/company-theatre-crm', live_url: 'https://crm.companytheatre.ca', local_path: '/Users/mildred/.openclaw/workspace/projects/company-theatre-crm', description: null },
+  { id: 'ct-website', name: 'Company Theatre Website', slug: 'ct-website', color: '#ef4444', repo_url: 'https://github.com/philipriccio/company-theatre-website', live_url: 'https://companytheatre.ca', local_path: '/Users/mildred/.openclaw/workspace/projects/company-theatre-website', description: null },
+  { id: 'hawco-crm', name: 'Hawco Dev CRM', slug: 'hawco-crm', color: '#8b5cf6', repo_url: 'https://github.com/philipriccio/hawco-dev-crm', live_url: 'https://hawco.companytheatre.ca', local_path: '/Users/mildred/.openclaw/workspace/projects/hawco-dev-crm', description: null },
+  { id: 'command-center', name: 'Mission Control', slug: 'command-center', color: '#3b82f6', repo_url: 'https://github.com/philipriccio/philip-mildred-command-center', live_url: null, local_path: '/Users/mildred/.openclaw/workspace/projects/command-center', description: null },
+  { id: 'coverageiq', name: 'CoverageIQ', slug: 'coverageiq', color: '#10b981', repo_url: null, live_url: 'https://coverageiq.companytheatre.ca', local_path: '/Users/mildred/.openclaw/workspace/projects/coverageiq', description: null },
+  { id: 'infrastructure', name: 'Infrastructure', slug: 'infrastructure', color: '#6b7280', repo_url: null, live_url: null, local_path: null, description: null },
+] as const;
+
+const insertProject = db.prepare(`
+  INSERT OR IGNORE INTO projects (id, name, slug, color, repo_url, live_url, local_path, description)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+`);
+for (const project of defaultProjects) {
+  insertProject.run(project.id, project.name, project.slug, project.color, project.repo_url, project.live_url, project.local_path, project.description);
+}
+
 // Agent desk positions in the pixel art office grid
 const AGENT_DESK_POSITIONS: Record<string, { x: number; y: number }> = {
   main:       { x: 18, y: 4 },   // Mildred's desk (top-right)
@@ -469,6 +557,8 @@ const selectPrsByTask = db.prepare<PrTrackingRow>('SELECT * FROM pr_tracking WHE
 const selectEventsByTask = db.prepare<TaskEventRow>('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at DESC');
 const selectOfficeAgentById = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE id = ?');
 const selectLatestOfficeReportByTaskId = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE task_id = ? ORDER BY completed_at DESC LIMIT 1');
+const selectProjectById = db.prepare<ProjectRow>('SELECT * FROM projects WHERE id = ?');
+const selectWorkItemById = db.prepare<WorkItemRow>('SELECT * FROM work_items WHERE id = ?');
 
 const activityBuffer: ActivityEntry[] = [];
 const MAX_ACTIVITY_ENTRIES = 100;
@@ -502,6 +592,61 @@ function normalizeStatus(value: unknown, fallback: TaskStatus = 'backlog'): Task
     return value as TaskStatus;
   }
   return fallback;
+}
+
+function normalizeWorkItemStatus(value: unknown, fallback: WorkItemStatus = 'todo'): WorkItemStatus {
+  if (typeof value === 'string' && WORK_ITEM_STATUSES.includes(value as WorkItemStatus)) {
+    return value as WorkItemStatus;
+  }
+  return fallback;
+}
+
+function clampPriority(value: unknown, fallback = 0) {
+  const num = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.max(0, Math.min(3, Math.trunc(num)));
+}
+
+function getProjectOr404(res: Response, id: string) {
+  const project = selectProjectById.get(id);
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return null;
+  }
+  return project;
+}
+
+function getWorkItemOr404(res: Response, id: string) {
+  const workItem = selectWorkItemById.get(id);
+  if (!workItem) {
+    res.status(404).json({ error: 'Work item not found' });
+    return null;
+  }
+  return workItem;
+}
+
+async function readProjectDetail(id: string) {
+  const project = selectProjectById.get(id);
+  if (!project) return null;
+  const work_items = db.prepare<WorkItemRow>('SELECT * FROM work_items WHERE project_id = ? ORDER BY priority ASC, updated_at DESC').all(id);
+  const cron_job_ids = db.prepare<ProjectCronLinkRow>('SELECT * FROM project_cron_links WHERE project_id = ? ORDER BY cron_job_id').all(id).map((row) => row.cron_job_id);
+
+  let cron_jobs: unknown[] = [];
+  if (cron_job_ids.length > 0 && gateway?.isConnected()) {
+    try {
+      const data = await gateway.request('cron.list', { includeDisabled: true }) as { jobs?: Array<{ id: string }> };
+      cron_jobs = (data.jobs ?? []).filter((job) => cron_job_ids.includes(job.id));
+    } catch (error) {
+      console.warn('[Projects] Failed to fetch linked cron jobs', error);
+    }
+  }
+
+  return {
+    ...project,
+    work_items,
+    cron_job_ids,
+    cron_jobs,
+  };
 }
 
 function getTaskOr404(res: Response, id: string) {
@@ -692,6 +837,121 @@ app.get('/api/tasks/:id', (req, res) => {
 app.get('/api/status', (_req, res) => {
   const status = db.prepare('SELECT * FROM status WHERE id = 1').get();
   res.json(status);
+});
+
+app.get('/api/projects', (_req, res) => {
+  const projects = db.prepare(`
+    SELECT p.*,
+      COALESCE(SUM(CASE WHEN wi.status != 'done' THEN 1 ELSE 0 END), 0) AS open_work_items_count,
+      COUNT(wi.id) AS work_items_count
+    FROM projects p
+    LEFT JOIN work_items wi ON wi.project_id = p.id
+    GROUP BY p.id
+    ORDER BY p.name
+  `).all();
+  res.json(projects);
+});
+
+app.get('/api/projects/:id', async (req, res) => {
+  const project = await readProjectDetail(req.params.id);
+  if (!project) {
+    res.status(404).json({ error: 'Project not found' });
+    return;
+  }
+  res.json(project);
+});
+
+app.post('/api/projects/:id/work-items', (req, res) => {
+  const project = getProjectOr404(res, req.params.id);
+  if (!project) return;
+  const { title, description, priority, status, assigned_agent, blocker_reason } = req.body as Partial<WorkItemRow>;
+  if (!title?.trim()) {
+    res.status(400).json({ error: 'Title is required' });
+    return;
+  }
+  const id = createId('work');
+  const now = Date.now();
+  const nextStatus = normalizeWorkItemStatus(status);
+  const nextPriority = clampPriority(priority);
+  const completedAt = nextStatus === 'done' ? now : null;
+  db.prepare(`
+    INSERT INTO work_items (id, project_id, title, description, priority, status, assigned_agent, blocker_reason, created_at, updated_at, completed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    project.id,
+    title.trim(),
+    description?.trim() || null,
+    nextPriority,
+    nextStatus,
+    assigned_agent?.trim() || null,
+    blocker_reason?.trim() || null,
+    now,
+    now,
+    completedAt,
+  );
+  res.status(201).json(selectWorkItemById.get(id));
+});
+
+app.patch('/api/work-items/:id', (req, res) => {
+  const existing = getWorkItemOr404(res, req.params.id);
+  if (!existing) return;
+  const payload = req.body as Partial<WorkItemRow>;
+  const nextStatus = Object.prototype.hasOwnProperty.call(payload, 'status') ? normalizeWorkItemStatus(payload.status, existing.status) : existing.status;
+  const now = Date.now();
+  const completedAt = nextStatus === 'done'
+    ? (existing.completed_at ?? now)
+    : (Object.prototype.hasOwnProperty.call(payload, 'completed_at') ? payload.completed_at ?? null : null);
+
+  db.prepare(`
+    UPDATE work_items
+    SET title = ?,
+        description = ?,
+        priority = ?,
+        status = ?,
+        assigned_agent = ?,
+        blocker_reason = ?,
+        updated_at = ?,
+        completed_at = ?
+    WHERE id = ?
+  `).run(
+    payload.title?.trim() || existing.title,
+    Object.prototype.hasOwnProperty.call(payload, 'description') ? payload.description?.trim() || null : existing.description,
+    Object.prototype.hasOwnProperty.call(payload, 'priority') ? clampPriority(payload.priority, existing.priority) : existing.priority,
+    nextStatus,
+    Object.prototype.hasOwnProperty.call(payload, 'assigned_agent') ? payload.assigned_agent?.trim() || null : existing.assigned_agent,
+    Object.prototype.hasOwnProperty.call(payload, 'blocker_reason') ? payload.blocker_reason?.trim() || null : existing.blocker_reason,
+    now,
+    completedAt,
+    existing.id,
+  );
+  res.json(selectWorkItemById.get(existing.id));
+});
+
+app.delete('/api/work-items/:id', (req, res) => {
+  const existing = getWorkItemOr404(res, req.params.id);
+  if (!existing) return;
+  db.prepare('DELETE FROM work_items WHERE id = ?').run(existing.id);
+  res.status(204).send();
+});
+
+app.post('/api/projects/:id/cron-links', (req, res) => {
+  const project = getProjectOr404(res, req.params.id);
+  if (!project) return;
+  const cronJobId = typeof req.body.cron_job_id === 'string' ? req.body.cron_job_id.trim() : '';
+  if (!cronJobId) {
+    res.status(400).json({ error: 'cron_job_id is required' });
+    return;
+  }
+  db.prepare('INSERT OR IGNORE INTO project_cron_links (project_id, cron_job_id) VALUES (?, ?)').run(project.id, cronJobId);
+  res.status(201).json({ project_id: project.id, cron_job_id: cronJobId });
+});
+
+app.delete('/api/projects/:id/cron-links/:cronJobId', (req, res) => {
+  const project = getProjectOr404(res, req.params.id);
+  if (!project) return;
+  db.prepare('DELETE FROM project_cron_links WHERE project_id = ? AND cron_job_id = ?').run(project.id, req.params.cronJobId);
+  res.status(204).send();
 });
 
 app.post('/api/tasks', (req, res) => {
