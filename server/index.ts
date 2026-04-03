@@ -445,6 +445,25 @@ for (const statement of migrationStatements) {
   }
 }
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS deliverables (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    description TEXT,
+    agent_id TEXT NOT NULL,
+    agent_name TEXT NOT NULL,
+    file_path TEXT,
+    file_name TEXT,
+    mime_type TEXT,
+    file_size INTEGER,
+    url TEXT,
+    category TEXT DEFAULT 'general',
+    collected INTEGER DEFAULT 0,
+    collected_at INTEGER,
+    created_at INTEGER NOT NULL
+  );
+`);
+
 db.exec(`INSERT OR IGNORE INTO status (id, gateway_connected, last_update) VALUES (1, 0, 0)`);
 
 const defaultAgents = [
@@ -1863,6 +1882,66 @@ app.get('/api/gateway/status', (_req, res) => {
 // ─── Gateway API Proxy Routes (cron, sessions, site health) ────────────
 import { registerGatewayApiRoutes } from './gateway-api.js';
 registerGatewayApiRoutes(app, () => gateway);
+
+// ─── Deliverables / Inbox API ─────────────────────────────────────────────────
+
+const insertDeliverable = db.prepare(`
+  INSERT INTO deliverables (id, title, description, agent_id, agent_name, file_path, file_name, mime_type, file_size, url, category, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`);
+
+const selectDeliverables = db.prepare(`SELECT * FROM deliverables ORDER BY created_at DESC LIMIT 100`);
+const selectUncollected = db.prepare(`SELECT * FROM deliverables WHERE collected = 0 ORDER BY created_at DESC`);
+const markCollected = db.prepare(`UPDATE deliverables SET collected = 1, collected_at = ? WHERE id = ?`);
+
+app.get('/api/inbox', (_req, res) => {
+  const items = selectDeliverables.all();
+  const uncollected = selectUncollected.all();
+  res.json({ items, uncollectedCount: uncollected.length });
+});
+
+app.get('/api/inbox/count', (_req, res) => {
+  const uncollected = selectUncollected.all();
+  res.json({ count: uncollected.length });
+});
+
+app.post('/api/inbox', (req, res) => {
+  const { title, description, agentId, agentName, fileName, mimeType, fileSize, url, category, filePath } = req.body as Record<string, string | number | undefined>;
+  if (!title || !agentId || !agentName) {
+    res.status(400).json({ error: 'title, agentId, and agentName are required' });
+    return;
+  }
+  const id = `del_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const now = Date.now();
+  insertDeliverable.run(id, title, description ?? null, agentId, agentName, filePath ?? null, fileName ?? null, mimeType ?? null, fileSize ?? null, url ?? null, category ?? 'general', now);
+  const item = db.prepare('SELECT * FROM deliverables WHERE id = ?').get(id);
+  broadcastUpdate({ type: 'inbox.new', data: item });
+  res.json({ ok: true, item });
+});
+
+app.post('/api/inbox/:id/collect', (req, res) => {
+  const { id } = req.params;
+  markCollected.run(Date.now(), id);
+  broadcastUpdate({ type: 'inbox.collected', data: { id } });
+  res.json({ ok: true });
+});
+
+// Serve deliverable files
+app.get('/api/inbox/:id/download', (req, res) => {
+  const { id } = req.params;
+  const item = db.prepare('SELECT * FROM deliverables WHERE id = ?').get(id) as { file_path?: string; file_name?: string; mime_type?: string } | undefined;
+  if (!item?.file_path) {
+    res.status(404).json({ error: 'File not found' });
+    return;
+  }
+  if (!fs.existsSync(item.file_path)) {
+    res.status(404).json({ error: 'File no longer exists on disk' });
+    return;
+  }
+  res.setHeader('Content-Type', item.mime_type || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `attachment; filename="${item.file_name || 'download'}"`);
+  fs.createReadStream(item.file_path).pipe(res);
+});
 
 server.listen(PORT, () => {
   console.log(`Command Center API running on port ${PORT}`);

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
 import { AgentDetailDrawer } from './AgentDetailDrawer';
 import { ReportsPanel } from './ReportsPanel';
+import { InboxDrawer, useInboxCount } from './InboxDrawer';
 
 type AgentStateSnapshot = {
   state: string;
@@ -154,6 +155,8 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [showInbox, setShowInbox] = useState(false);
+  const inboxCount = useInboxCount(apiBase);
   const [selectedDetail, setSelectedDetail] = useState<TaskDetail | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
   const [usingFallbackData, setUsingFallbackData] = useState(false);
@@ -352,6 +355,8 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
             color: a.color,
           }))}
           onSelectAgent={(agentId) => void openAgentDetail(agentId)}
+          inboxCount={inboxCount}
+          onInboxClick={() => setShowInbox(true)}
         />
       </div>
 
@@ -364,6 +369,12 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         onClose={() => setShowReports(false)}
         onAcknowledge={acknowledgeReport}
         onApprove={approveReport}
+      />
+
+      <InboxDrawer
+        apiBase={apiBase}
+        isOpen={showInbox}
+        onClose={() => setShowInbox(false)}
       />
 
       {selectedDetail && (

@@ -11,65 +11,86 @@ export interface OfficeAgent {
 interface OfficeCanvas2DProps {
   agents: OfficeAgent[];
   onSelectAgent?: (agentId: string) => void;
+  inboxCount?: number;
+  onInboxClick?: () => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const W = 1100;
-const H = 720;
-const FLOOR_TILE = 32;
-const WALK_SPEED = 90; // px/sec
+const W = 900;
+const H = 520;
+const WALK_SPEED = 120; // px/sec
 
-// Colors — Company Theatre palette
+// Room layout zones
+const ROOM_TOP = 8;     // top of rooms area
+const ROOM_H = 140;     // height of rooms
+const WORK_TOP = ROOM_TOP + ROOM_H + 16; // where desks start
+const STATUS_H = 50;
+
+// Colors — clean, minimal
 const C = {
-  floorA: '#0f172a',
-  floorB: '#131e2e',
-  wall: '#1e293b',
-  wallBorder: '#334155',
-  roomFill: '#0d1929',
-  roomBorder: '#1e3a5f',
-  desk: '#1e3a2f',
-  deskBorder: '#2d5a40',
+  floor: '#fafafa',
+  floorLine: '#e5e7eb',
+  desk: '#1e293b',
+  deskBorder: '#334155',
   monitor: '#0ea5e9',
   monitorScreen: '#172554',
-  chair: '#374151',
-  lounge: '#1a1a2e',
+  chair: '#4b5563',
   door: '#d97706',
-  text: '#94a3b8',
-  textBright: '#e2e8f0',
+  text: '#64748b',
+  textBright: '#1e293b',
   statusBar: '#0a0f1e',
   statusBorder: '#1e293b',
-  ctRed: '#b91c1c',        // Company Theatre red
-  ctGold: '#fbbf24',       // accent gold
-  spotlightYellow: '#fde68a',
+  ctRed: '#b91c1c',
+  ctGold: '#fbbf24',
   curtainRed: '#7f1d1d',
+  roomWall: '#1e293b',
+  roomFloor: '#f1f5f9',
+  roomBorder: '#334155',
+  greenRoomWall: '#14532d',
+  greenRoomFloor: '#ecfdf5',
+  officeWall: '#450a0a',
+  officeFloor: '#fef2f2',
+  furniture: '#78716c',
+  inboxTray: '#d97706',
 };
 
-// ─── Room / furniture layout ──────────────────────────────────────────────────
-const ROOMS = {
-  conference: { x: 20, y: 20, w: 210, h: 140, label: 'The Green Room' },
-  philipOffice: { x: 250, y: 20, w: 210, h: 140, label: "Philip's Office" },
-  kitchen:      { x: 480, y: 20, w: 180, h: 140, label: 'Kitchen' },
-  lounge:       { x: 900, y: 170, w: 180, h: 380, label: 'Backstage' },
+// ─── Philip's Office (top-left) ──────────────────────────────────────────────
+const OFFICE = { x: 16, y: ROOM_TOP, w: 260, h: ROOM_H };
+
+// ─── Green Room / Lounge (top-right) ─────────────────────────────────────────
+const GREEN_ROOM = { x: W - 16 - 320, y: ROOM_TOP, w: 320, h: ROOM_H };
+
+// ─── Layout — desks in a single row below rooms ─────────────────────────────
+const DOOR = { x: W / 2 - 20, y: H - STATUS_H - 18, w: 40, h: 12 };
+
+// 5 desks evenly spaced in one row
+const DESK_SPACING = W / 6;
+const DESK_Y = WORK_TOP + 30; // desk surface Y
+const CHAIR_Y = DESK_Y + 60; // where the agent sits
+
+const DESK_IDS = ['main', 'dev', 'janet', 'kimi', 'gpt-mini'] as const;
+const DESK_LABELS: Record<string, string> = {
+  main: 'Mildred', dev: 'Dev', janet: 'Janet', kimi: 'Kimi', 'gpt-mini': 'GPT-mini',
 };
 
-const DOOR = { x: W / 2 - 20, y: 665, w: 40, h: 14 };
-
-// Desk positions (center of chair position)
-const DESKS: Record<string, { x: number; y: number; deskX: number; deskY: number; label: string }> = {
-  main:      { x: 160, y: 490, deskX: 120, deskY: 430, label: 'Mildred' },
-  dev:       { x: 400, y: 400, deskX: 360, deskY: 340, label: 'Dev' },
-  janet:     { x: 160, y: 600, deskX: 120, deskY: 545, label: 'Janet' },
-  kimi:      { x: 400, y: 600, deskX: 360, deskY: 545, label: 'Kimi' },
-  'gpt-mini':{ x: 280, y: 300, deskX: 240, deskY: 240, label: 'GPT-mini' },
-};
+const DESKS: Record<string, { x: number; y: number; deskX: number; deskY: number; label: string }> = {};
+DESK_IDS.forEach((id, i) => {
+  const cx = DESK_SPACING * (i + 1);
+  DESKS[id] = {
+    x: cx,
+    y: CHAIR_Y,
+    deskX: cx - 40,
+    deskY: DESK_Y,
+    label: DESK_LABELS[id],
+  };
+});
 
 // Waypoints
 const WP = {
-  door:    { x: W / 2, y: 640 },
-  hub:     { x: W / 2, y: 500 },
-  hubLeft: { x: 300, y: 500 },
-  kitchen: { x: 560, y: 100 },
-  lounge:  { x: 940, y: 380 },
+  door:    { x: W / 2, y: H - STATUS_H - 30 },
+  hub:     { x: W / 2, y: CHAIR_Y + 40 },
+  kitchen: { x: GREEN_ROOM.x + 60, y: GREEN_ROOM.y + GREEN_ROOM.h / 2 },
+  lounge:  { x: GREEN_ROOM.x + GREEN_ROOM.w / 2, y: GREEN_ROOM.y + GREEN_ROOM.h / 2 },
 };
 
 // Agent personality icons
@@ -137,8 +158,7 @@ function stateToPhase(state: OfficeAgent['state']): AgentPhase {
   return 'gone';
 }
 
-function buildPath(from: Vec2, desk: { x: number; y: number }): Vec2[] {
-  // Simple path through hub
+function buildPath(_from: Vec2, desk: { x: number; y: number }): Vec2[] {
   return [{ ...WP.hub }, { x: desk.x, y: desk.y }];
 }
 
@@ -250,48 +270,185 @@ function syncState(r: AgentRuntime, newState: OfficeAgent['state']) {
 }
 
 // ─── Render helpers ───────────────────────────────────────────────────────────
-function drawFloor(ctx: CanvasRenderingContext2D) {
-  for (let row = 0; row * FLOOR_TILE < H - 50; row++) {
-    for (let col = 0; col * FLOOR_TILE < W; col++) {
-      ctx.fillStyle = (row + col) % 2 === 0 ? C.floorA : C.floorB;
-      ctx.fillRect(col * FLOOR_TILE, row * FLOOR_TILE, FLOOR_TILE, FLOOR_TILE);
-    }
+function drawFloor(ctx: CanvasRenderingContext2D, inboxCount: number) {
+  // Clean white floor
+  ctx.fillStyle = C.floor;
+  ctx.fillRect(0, 0, W, H - STATUS_H);
+
+  // Subtle grid lines
+  ctx.strokeStyle = C.floorLine;
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x < W; x += 60) {
+    ctx.beginPath();
+    ctx.moveTo(x, WORK_TOP);
+    ctx.lineTo(x, H - STATUS_H);
+    ctx.stroke();
+  }
+  for (let y = WORK_TOP; y < H - STATUS_H; y += 60) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
   }
 
-  // CT logo watermark on the floor (center of workspace area)
-  ctx.save();
-  ctx.globalAlpha = 0.06;
-  ctx.fillStyle = C.ctRed;
-  ctx.font = 'bold 120px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('CT', W / 2, 520);
-  ctx.restore();
-
-  // Stage curtain valance at the very top
+  // Top accent line (curtain red valance)
   ctx.fillStyle = C.curtainRed;
   ctx.fillRect(0, 0, W, 6);
-  ctx.fillStyle = '#5a1515';
-  // Scalloped edge
-  for (let i = 0; i < W / 20; i++) {
-    ctx.beginPath();
-    ctx.arc(i * 20 + 10, 6, 8, 0, Math.PI, false);
-    ctx.fill();
-  }
-  // Gold trim
   ctx.fillStyle = 'rgba(251,191,36,0.3)';
-  ctx.fillRect(0, 0, W, 2);
-}
+  ctx.fillRect(0, 0, W, 3);
 
-function drawRoom(ctx: CanvasRenderingContext2D, room: typeof ROOMS.conference) {
-  ctx.fillStyle = C.roomFill;
-  ctx.fillRect(room.x, room.y, room.w, room.h);
-  ctx.strokeStyle = C.roomBorder;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(room.x, room.y, room.w, room.h);
-  ctx.fillStyle = C.textBright;
+  // ─── Philip's Office (top-left) ────────────────────────────
+  const o = OFFICE;
+  // Floor
+  ctx.fillStyle = C.officeFloor;
+  ctx.fillRect(o.x, o.y, o.w, o.h);
+  // Walls
+  ctx.strokeStyle = C.officeWall;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(o.x, o.y, o.w, o.h);
+  // Red accent wall (left)
+  ctx.fillStyle = C.ctRed;
+  ctx.fillRect(o.x, o.y, 4, o.h);
+  // Star on door (right wall opening)
+  ctx.fillStyle = C.ctGold;
+  ctx.font = '18px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('⭐', o.x + o.w - 14, o.y + o.h / 2 + 6);
+  // Label
+  ctx.fillStyle = C.officeWall;
   ctx.font = 'bold 11px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(room.label, room.x + room.w / 2, room.y + 16);
+  ctx.fillText("Philip's Office", o.x + o.w / 2, o.y + 18);
+  // Desk in Philip's office
+  ctx.fillStyle = '#5c3a1e';
+  ctx.fillRect(o.x + 20, o.y + 40, 100, 40);
+  ctx.strokeStyle = '#44280e';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(o.x + 20, o.y + 40, 100, 40);
+  // Monitor on Philip's desk
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(o.x + 50, o.y + 28, 30, 20);
+  ctx.fillStyle = '#0ea5e9';
+  ctx.fillRect(o.x + 52, o.y + 30, 26, 16);
+  // Chair
+  ctx.fillStyle = '#991b1b';
+  ctx.fillRect(o.x + 55, o.y + 88, 30, 20);
+  // Inbox tray (physical tray on desk)
+  const trayX = o.x + 140;
+  const trayY = o.y + 44;
+  ctx.fillStyle = C.inboxTray;
+  ctx.fillRect(trayX, trayY, 50, 8);
+  ctx.fillRect(trayX, trayY + 12, 50, 8);
+  ctx.fillRect(trayX, trayY + 24, 50, 8);
+  // Inbox label
+  ctx.fillStyle = C.officeWall;
+  ctx.font = '9px "JetBrains Mono", monospace';
+  ctx.fillText('📥 INBOX', trayX + 25, trayY - 4);
+  // Inbox count badge
+  if (inboxCount > 0) {
+    ctx.fillStyle = '#dc2626';
+    ctx.beginPath();
+    ctx.arc(trayX + 50, trayY - 4, 9, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 9px sans-serif';
+    ctx.fillText(String(inboxCount), trayX + 50, trayY - 1);
+  }
+  // Papers in tray (visual hint)
+  if (inboxCount > 0) {
+    ctx.fillStyle = '#fefce8';
+    for (let i = 0; i < Math.min(inboxCount, 3); i++) {
+      ctx.fillRect(trayX + 4 + i * 2, trayY + 2 + i * 12, 42, 6);
+    }
+  }
+  // Bookshelf on back wall
+  ctx.fillStyle = '#5c3a1e';
+  ctx.fillRect(o.x + 210, o.y + 30, 36, 80);
+  ctx.fillStyle = '#44280e';
+  ctx.fillRect(o.x + 210, o.y + 55, 36, 2);
+  ctx.fillRect(o.x + 210, o.y + 80, 36, 2);
+  // Books
+  const bookColors = ['#dc2626','#2563eb','#16a34a','#d97706','#7c3aed'];
+  for (let i = 0; i < 5; i++) {
+    ctx.fillStyle = bookColors[i];
+    ctx.fillRect(o.x + 213 + i * 6, o.y + 33, 5, 20);
+  }
+
+  // ─── Green Room / Lounge (top-right) ───────────────────────
+  const g = GREEN_ROOM;
+  // Floor
+  ctx.fillStyle = C.greenRoomFloor;
+  ctx.fillRect(g.x, g.y, g.w, g.h);
+  // Walls
+  ctx.strokeStyle = C.greenRoomWall;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(g.x, g.y, g.w, g.h);
+  // Label with vanity lights
+  ctx.fillStyle = C.greenRoomWall;
+  ctx.font = 'bold 11px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('💡 Green Room 💡', g.x + g.w / 2, g.y + 18);
+
+  // Large table (center of green room)
+  const tableX = g.x + g.w / 2 - 60;
+  const tableY = g.y + 40;
+  ctx.fillStyle = '#78716c';
+  ctx.fillRect(tableX, tableY, 120, 50);
+  ctx.strokeStyle = '#57534e';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(tableX, tableY, 120, 50);
+  // Table legs
+  ctx.fillStyle = '#57534e';
+  ctx.fillRect(tableX + 5, tableY + 50, 4, 8);
+  ctx.fillRect(tableX + 111, tableY + 50, 4, 8);
+
+  // Chairs around table
+  ctx.fillStyle = '#4b5563';
+  // Top chairs
+  ctx.fillRect(tableX + 20, tableY - 14, 20, 12);
+  ctx.fillRect(tableX + 50, tableY - 14, 20, 12);
+  ctx.fillRect(tableX + 80, tableY - 14, 20, 12);
+  // Bottom chairs
+  ctx.fillRect(tableX + 20, tableY + 52, 20, 12);
+  ctx.fillRect(tableX + 50, tableY + 52, 20, 12);
+  ctx.fillRect(tableX + 80, tableY + 52, 20, 12);
+
+  // Couch (left side of green room)
+  ctx.fillStyle = '#7f1d1d';
+  ctx.fillRect(g.x + 14, g.y + 40, 24, 60);
+  ctx.fillStyle = '#991b1b';
+  ctx.fillRect(g.x + 16, g.y + 44, 20, 52);
+  // Couch label
+  ctx.fillStyle = '#57534e';
+  ctx.font = '8px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('🛋️', g.x + 26, g.y + 112);
+
+  // Comfortable chairs (right side)
+  ctx.fillStyle = '#4b5563';
+  ctx.fillRect(g.x + g.w - 50, g.y + 45, 24, 24);
+  ctx.fillRect(g.x + g.w - 50, g.y + 78, 24, 24);
+  // Coffee table
+  ctx.fillStyle = '#a8a29e';
+  ctx.fillRect(g.x + g.w - 80, g.y + 58, 22, 30);
+
+  // Coffee machine
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(g.x + g.w - 40, g.y + 28, 20, 16);
+  ctx.fillStyle = '#dc2626';
+  ctx.fillRect(g.x + g.w - 38, g.y + 30, 3, 3);
+  ctx.fillStyle = '#57534e';
+  ctx.font = '8px "JetBrains Mono", monospace';
+  ctx.fillText('☕', g.x + g.w - 30, g.y + 56);
+
+  // CT watermark — subtle in work area
+  ctx.save();
+  ctx.globalAlpha = 0.03;
+  ctx.fillStyle = C.ctRed;
+  ctx.font = 'bold 60px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('CT', W / 2, CHAIR_Y + 60);
+  ctx.restore();
 }
 
 function drawDesk(ctx: CanvasRenderingContext2D, d: typeof DESKS.mildred) {
@@ -315,11 +472,11 @@ function drawDesk(ctx: CanvasRenderingContext2D, d: typeof DESKS.mildred) {
   ctx.fillStyle = C.chair;
   ctx.fillRect(d.x - 12, d.y - 8, 24, 20);
 
-  // Name plate
-  ctx.fillStyle = C.text;
-  ctx.font = '10px "JetBrains Mono", monospace';
+  // Name plate — dark text on white floor for visibility
+  ctx.fillStyle = '#1e293b';
+  ctx.font = 'bold 12px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(d.label, d.deskX + 40, d.deskY + 65);
+  ctx.fillText(d.label, d.deskX + 40, d.deskY + 68);
 }
 
 function drawDoor(ctx: CanvasRenderingContext2D) {
@@ -331,286 +488,7 @@ function drawDoor(ctx: CanvasRenderingContext2D) {
   ctx.fillText('🎭 STAGE DOOR', DOOR.x + DOOR.w / 2, DOOR.y - 4);
 }
 
-function drawLounge(ctx: CanvasRenderingContext2D) {
-  const r = ROOMS.lounge;
-  ctx.fillStyle = '#1a0a0a';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = '#4d1a1a';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
-
-  // Curtain drapes on left and right walls
-  for (let i = 0; i < 12; i++) {
-    const wave = Math.sin(i * 0.8) * 3;
-    ctx.fillStyle = i % 2 === 0 ? C.curtainRed : '#5a1515';
-    ctx.fillRect(r.x + 2 + wave, r.y + 20 + i * 30, 12, 30);
-    ctx.fillRect(r.x + r.w - 14 + wave, r.y + 20 + i * 30, 12, 30);
-  }
-
-  ctx.fillStyle = C.ctGold;
-  ctx.font = 'bold 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(r.label, r.x + r.w / 2, r.y + 16);
-
-  // Star on the door
-  ctx.font = '14px sans-serif';
-  ctx.fillText('⭐', r.x + r.w / 2 - 7, r.y + 34);
-
-  // Vintage couch (velvet red)
-  ctx.fillStyle = '#7f1d1d';
-  ctx.fillRect(r.x + 20, r.y + 50, 140, 45);
-  ctx.fillStyle = '#991b1b';
-  ctx.fillRect(r.x + 22, r.y + 52, 136, 20); // cushion highlight
-
-  // Coffee table with scripts
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(r.x + 40, r.y + 110, 80, 35);
-  // Scripts on the table
-  ctx.fillStyle = '#f5f0e0';
-  ctx.fillRect(r.x + 50, r.y + 118, 16, 22);
-  ctx.fillRect(r.x + 70, r.y + 116, 16, 22);
-  ctx.fillStyle = '#94a3b8';
-  for (let i = 0; i < 3; i++) {
-    ctx.fillRect(r.x + 52, r.y + 122 + i * 5, 12, 1);
-  }
-
-  // Props rack (costumes/hats)
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(r.x + 25, r.y + 160, 130, 4); // rack bar
-  ctx.fillRect(r.x + 30, r.y + 160, 3, 30);   // left post
-  ctx.fillRect(r.x + 152, r.y + 160, 3, 30);  // right post
-  // Hanging costumes
-  const costumeColors = ['#dc2626', '#2563eb', '#15803d', '#7c3aed', C.ctGold];
-  for (let i = 0; i < 5; i++) {
-    ctx.fillStyle = costumeColors[i];
-    ctx.fillRect(r.x + 40 + i * 24, r.y + 165, 14, 24);
-  }
-
-  // Prop trunk
-  ctx.fillStyle = '#5a3a1a';
-  ctx.fillRect(r.x + 30, r.y + 220, 80, 40);
-  ctx.strokeStyle = '#92400e';
-  ctx.lineWidth = 1;
-  ctx.strokeRect(r.x + 30, r.y + 220, 80, 40);
-  ctx.fillStyle = C.ctGold;
-  ctx.fillRect(r.x + 65, r.y + 235, 10, 10); // latch
-
-  // Theatre masks on the wall — 🎭
-  ctx.font = '24px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.fillText('🎭', r.x + r.w / 2, r.y + 300);
-
-  // "THE COMPANY THEATRE" small plaque
-  ctx.fillStyle = C.ctRed;
-  ctx.fillRect(r.x + 20, r.y + r.h - 40, 140, 22);
-  ctx.fillStyle = C.ctGold;
-  ctx.font = 'bold 8px "JetBrains Mono", monospace';
-  ctx.fillText('THE COMPANY THEATRE', r.x + r.w / 2, r.y + r.h - 25);
-}
-
-function drawConferenceRoom(ctx: CanvasRenderingContext2D) {
-  const r = ROOMS.conference;
-  // Dark backstage-green walls
-  ctx.fillStyle = '#0a1a14';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = '#2d5a40';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = C.ctGold;
-  ctx.font = 'bold 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(r.label, r.x + r.w / 2, r.y + 16);
-
-  // Vanity mirror (long rectangle on back wall)
-  ctx.fillStyle = '#1e293b';
-  ctx.fillRect(r.x + 30, r.y + 28, 150, 40);
-  ctx.strokeStyle = C.ctGold;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(r.x + 30, r.y + 28, 150, 40);
-  // Mirror reflection shimmer
-  ctx.fillStyle = 'rgba(255,255,255,0.06)';
-  ctx.fillRect(r.x + 35, r.y + 32, 60, 32);
-
-  // Vanity light bulbs across the top of the mirror
-  for (let i = 0; i < 7; i++) {
-    const bx = r.x + 42 + i * 22;
-    const by = r.y + 24;
-    ctx.fillStyle = C.spotlightYellow;
-    ctx.beginPath();
-    ctx.arc(bx, by, 4, 0, Math.PI * 2);
-    ctx.fill();
-    // Glow
-    ctx.fillStyle = 'rgba(253,230,138,0.15)';
-    ctx.beginPath();
-    ctx.arc(bx, by, 8, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  // Makeup counter / shelf below mirror
-  ctx.fillStyle = '#1a3d2a';
-  ctx.fillRect(r.x + 30, r.y + 70, 150, 15);
-
-  // Directors chairs (classic X-frame style)
-  for (let i = 0; i < 3; i++) {
-    const cx = r.x + 55 + i * 50;
-    const cy = r.y + 110;
-    // Chair back (canvas fabric)
-    ctx.fillStyle = C.ctRed;
-    ctx.fillRect(cx - 10, cy - 12, 20, 8);
-    // Frame (X shape simplified)
-    ctx.strokeStyle = '#92400e';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(cx - 8, cy - 4);
-    ctx.lineTo(cx + 8, cy + 12);
-    ctx.moveTo(cx + 8, cy - 4);
-    ctx.lineTo(cx - 8, cy + 12);
-    ctx.stroke();
-    // Seat
-    ctx.fillStyle = C.ctRed;
-    ctx.fillRect(cx - 8, cy + 2, 16, 5);
-  }
-
-  // Theatre masks on right wall — 🎭
-  ctx.font = '20px sans-serif';
-  ctx.fillText('🎭', r.x + r.w - 30, r.y + 90);
-}
-
-function drawPhilipOffice(ctx: CanvasRenderingContext2D) {
-  const r = ROOMS.philipOffice;
-  // Deep red accent wall
-  ctx.fillStyle = '#1a0a0a';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  // Red accent on back wall
-  ctx.fillStyle = C.curtainRed;
-  ctx.fillRect(r.x + 2, r.y + 2, r.w - 4, 20);
-  ctx.strokeStyle = '#4d1a1a';
-  ctx.lineWidth = 2;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = C.ctGold;
-  ctx.font = 'bold 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText("Philip's Office", r.x + r.w / 2, r.y + 16);
-
-  // Executive desk (dark mahogany)
-  ctx.fillStyle = '#2d1a0a';
-  ctx.fillRect(r.x + 40, r.y + 40, 130, 60);
-  ctx.strokeStyle = '#5a3a1a';
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(r.x + 40, r.y + 40, 130, 60);
-
-  // Scripts/papers on desk
-  ctx.fillStyle = '#f5f0e0';
-  ctx.fillRect(r.x + 50, r.y + 50, 24, 32);
-  ctx.fillRect(r.x + 78, r.y + 48, 24, 32);
-  // Script text lines
-  ctx.fillStyle = '#94a3b8';
-  for (let i = 0; i < 4; i++) {
-    ctx.fillRect(r.x + 53, r.y + 55 + i * 6, 18, 1);
-    ctx.fillRect(r.x + 81, r.y + 53 + i * 6, 18, 1);
-  }
-  // Red pen
-  ctx.fillStyle = '#dc2626';
-  ctx.fillRect(r.x + 108, r.y + 55, 3, 20);
-
-  // Spotlight lamp (floor standing, left side)
-  ctx.fillStyle = '#374151';
-  ctx.fillRect(r.x + 14, r.y + 90, 4, 40);     // Stand
-  ctx.fillStyle = '#1c1917';
-  ctx.fillRect(r.x + 10, r.y + 130, 12, 4);     // Base
-  ctx.fillStyle = C.spotlightYellow;
-  ctx.beginPath();
-  ctx.moveTo(r.x + 8, r.y + 90);
-  ctx.lineTo(r.x + 24, r.y + 90);
-  ctx.lineTo(r.x + 16, r.y + 78);
-  ctx.closePath();
-  ctx.fill();
-  // Spotlight glow
-  ctx.fillStyle = 'rgba(253,230,138,0.08)';
-  ctx.beginPath();
-  ctx.arc(r.x + 16, r.y + 86, 20, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Director's chair (right side)
-  const cx = r.x + r.w - 40;
-  const cy = r.y + 100;
-  ctx.fillStyle = C.ctRed;
-  ctx.fillRect(cx - 12, cy - 14, 24, 8);         // Back canvas
-  ctx.strokeStyle = '#92400e';
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(cx - 10, cy - 6);
-  ctx.lineTo(cx + 10, cy + 14);
-  ctx.moveTo(cx + 10, cy - 6);
-  ctx.lineTo(cx - 10, cy + 14);
-  ctx.stroke();
-  ctx.fillStyle = C.ctRed;
-  ctx.fillRect(cx - 10, cy + 2, 20, 5);           // Seat
-
-  // Star on the door ⭐
-  ctx.font = '14px sans-serif';
-  ctx.fillText('⭐', r.x + r.w / 2 - 7, r.y + r.h - 8);
-}
-
-function drawKitchen(ctx: CanvasRenderingContext2D) {
-  const r = ROOMS.kitchen;
-  ctx.fillStyle = '#0d1a14';
-  ctx.fillRect(r.x, r.y, r.w, r.h);
-  ctx.strokeStyle = C.roomBorder;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(r.x, r.y, r.w, r.h);
-  ctx.fillStyle = C.textBright;
-  ctx.font = 'bold 11px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('Kitchen', r.x + r.w / 2, r.y + 16);
-  // Counter
-  ctx.fillStyle = '#1e3d2a';
-  ctx.fillRect(r.x + 10, r.y + 25, r.w - 20, 30);
-  // Fridge
-  ctx.fillStyle = '#e2e8f0';
-  ctx.fillRect(r.x + 15, r.y + 60, 36, 70);
-  ctx.fillStyle = '#94a3b8';
-  ctx.fillRect(r.x + 17, r.y + 62, 14, 30);
-  ctx.fillRect(r.x + 17, r.y + 96, 14, 30);
-  // Coffee machine
-  ctx.fillStyle = '#1c1917';
-  ctx.fillRect(r.x + 100, r.y + 60, 50, 55);
-  ctx.fillStyle = '#dc2626';
-  ctx.beginPath();
-  ctx.arc(r.x + 125, r.y + 80, 12, 0, Math.PI * 2);
-  ctx.fill();
-  // "BREAK A LEG" sign on the wall
-  ctx.fillStyle = C.ctRed;
-  ctx.fillRect(r.x + 60, r.y + 120, 110, 18);
-  ctx.fillStyle = C.ctGold;
-  ctx.font = 'bold 9px "JetBrains Mono", monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('BREAK A LEG ☕', r.x + 115, r.y + 133);
-}
-
-function drawPlants(ctx: CanvasRenderingContext2D) {
-  const positions = [
-    { x: 870, y: 170 }, { x: 870, y: 540 }, { x: 665, y: 170 },
-    { x: 20, y: 170 }, { x: 680, y: 640 },
-  ];
-  for (const p of positions) {
-    // Pot
-    ctx.fillStyle = '#92400e';
-    ctx.fillRect(p.x - 8, p.y + 10, 16, 12);
-    // Plant
-    ctx.fillStyle = '#15803d';
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = '#16a34a';
-    ctx.beginPath();
-    ctx.arc(p.x - 8, p.y + 4, 10, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(p.x + 8, p.y + 4, 10, 0, Math.PI * 2);
-    ctx.fill();
-  }
-}
+// Room/lounge/kitchen/plant functions removed — clean minimal layout
 
 function drawCharacter(
   ctx: CanvasRenderingContext2D,
@@ -741,29 +619,29 @@ function drawCharacter(
     }
   }
 
-  // Name tag
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(x - 20, y - 24 * scale - 4, 40, 12);
-  ctx.fillStyle = r.color;
-  ctx.font = '9px "JetBrains Mono", monospace';
+  // Name tag — dark pill on white floor
+  ctx.fillStyle = 'rgba(30,41,59,0.85)';
+  ctx.fillRect(x - 24, y - 24 * scale - 4, 48, 14);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 9px "JetBrains Mono", monospace';
   ctx.textAlign = 'center';
   ctx.fillText(r.name, x, y - 24 * scale + 7);
 }
 
 function drawStatusBar(ctx: CanvasRenderingContext2D, agents: AgentRuntime[]) {
   ctx.fillStyle = C.statusBar;
-  ctx.fillRect(0, H - 50, W, 50);
+  ctx.fillRect(0, H - STATUS_H, W, STATUS_H);
   ctx.strokeStyle = C.statusBorder;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(0, H - 50);
-  ctx.lineTo(W, H - 50);
+  ctx.moveTo(0, H - STATUS_H);
+  ctx.lineTo(W, H - STATUS_H);
   ctx.stroke();
 
   const slotW = W / agents.length;
   agents.forEach((r, i) => {
     const bx = i * slotW + slotW / 2;
-    const by = H - 25;
+    const by = H - STATUS_H / 2;
 
     // Color dot
     ctx.fillStyle = r.color;
@@ -835,7 +713,7 @@ const DEMO_SCRIPT: Array<{ delay: number; agentId: string; state: OfficeAgent['s
 ];
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export function OfficeCanvas2D({ agents: propAgents, onSelectAgent }: OfficeCanvas2DProps) {
+export function OfficeCanvas2D({ agents: propAgents, onSelectAgent, inboxCount = 0, onInboxClick }: OfficeCanvas2DProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const runtimeRef = useRef<AgentRuntime[]>([]);
   const rafRef = useRef<number>(0);
@@ -901,13 +779,8 @@ export function OfficeCanvas2D({ agents: propAgents, onSelectAgent }: OfficeCanv
       }
 
       // Render
-      ctx!.clearRect(0, 0, W, H - 50);
-      drawFloor(ctx!);
-      drawConferenceRoom(ctx!);
-      drawPhilipOffice(ctx!);
-      drawKitchen(ctx!);
-      drawLounge(ctx!);
-      drawPlants(ctx!);
+      ctx!.clearRect(0, 0, W, H - STATUS_H);
+      drawFloor(ctx!, inboxCount);
 
       // Desks
       for (const [, desk] of Object.entries(DESKS)) {
@@ -937,11 +810,20 @@ export function OfficeCanvas2D({ agents: propAgents, onSelectAgent }: OfficeCanv
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current!;
     const rect = canvas.getBoundingClientRect();
-    // Scale mouse coords back to canvas pixel space (CSS scales the canvas)
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
     const mx = (e.clientX - rect.left) * scaleX;
     const my = (e.clientY - rect.top) * scaleY;
+
+    // Check inbox tray click (in Philip's office)
+    const trayX = OFFICE.x + 140;
+    const trayY = OFFICE.y + 44;
+    if (mx >= trayX && mx <= trayX + 50 && my >= trayY - 10 && my <= trayY + 40) {
+      onInboxClick?.();
+      return;
+    }
+
+    // Check agent clicks
     for (const r of runtimeRef.current) {
       if (!r.visible) continue;
       if (Math.abs(mx - r.pos.x) < 30 && Math.abs(my - r.pos.y) < 34) {
