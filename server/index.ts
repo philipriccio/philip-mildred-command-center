@@ -19,6 +19,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
 const FRONTEND_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
+const ENABLE_PUBLIC_DASHBOARD_TUNNEL = process.env.ENABLE_PUBLIC_DASHBOARD_TUNNEL === '1';
 const TASK_STATUSES = ['backlog', 'ready', 'in_progress', 'verification', 'complete'] as const;
 type TaskStatus = (typeof TASK_STATUSES)[number];
 type ApprovalDecision = 'approve' | 'request_changes' | 'send_back';
@@ -205,6 +206,13 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '250kb' }));
+if (ENABLE_PUBLIC_DASHBOARD_TUNNEL) {
+  const distPath = path.join(__dirname, '..', 'dist');
+  app.use(express.static(distPath));
+  app.get(/^\/(?!api|ws).*/, (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
 
 const uploadsDir = path.join(__dirname, '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) {

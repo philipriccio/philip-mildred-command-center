@@ -178,3 +178,10 @@ This confirms the project was considered active and worth preserving alongside o
   - recommended next action
 - Smoke-tested endpoint locally: returned SelfTape branch `feature/audit-fixes-submission-reader-mode`, head `03c3da7`, clean tree, build `277`, and active Expo incident matching Builds 276/277.
 - Verification: `npm run build` passed.
+
+## Private/local dashboard serving guard — Apr 27, 2026
+- During laptop access testing, local LAN routing/Bonjour failed, so a temporary localtunnel was briefly tested and then shut down after Philip raised safety concerns.
+- Added an explicit opt-in server flag `ENABLE_PUBLIC_DASHBOARD_TUNNEL=1` for serving the built dashboard through the API process when a temporary tunnel is intentionally used.
+- Default behavior remains local/dev split (`localhost:5173` frontend, `localhost:3001` API); public serving is off unless explicitly enabled.
+- Frontend API fallback now uses `window.location.origin` when no `VITE_API_BASE_URL` is set, allowing a same-origin private/tunnel deployment without hardcoding `localhost:3001`.
+- Verification: `npm run build` and `git diff --check` passed.
