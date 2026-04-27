@@ -5,7 +5,7 @@ export const selfTapeOpsData: SelfTapeOpsData = {
     goal: 'Become the best and most-used self-tape app on the market.',
     strategy: 'First build actor trust through a beautiful, reliable audition workflow. Then turn that trust into awareness and adoption.',
     phase: 'Controlled TestFlight validation + product operating-system buildout',
-    currentRecommendation: 'Protect trust: do one clean EAS retry after the Expo iOS worker incident clears, then device-test the full actor journey before adding more recording-surface complexity.',
+    currentRecommendation: 'Build 278 is uploaded to App Store Connect/TestFlight. Hold the build path, watch diagnostics, and prepare a focused device-test pass for import → reader → record → keep → review → combined/separate export.',
   },
   authority: {
     green: [
@@ -123,10 +123,10 @@ export const selfTapeOpsData: SelfTapeOpsData = {
       status: 'CANNOT VERIFY — needs device test',
     },
     {
-      title: 'Expo/EAS iOS Mac worker incident is blocking the next TestFlight build.',
+      title: 'Build 278 is not release proof until Apple/TestFlight processing and device QA complete.',
       severity: 'high',
-      owner: 'Mildred monitors; Expo resolves',
-      status: 'Blocked outside the app; retry only after incident clears.',
+      owner: 'Philip device-tests; Mildred monitors diagnostics',
+      status: 'Awaiting TestFlight/device truth.',
     },
     {
       title: 'Exported audio and separate-scene files are locally hardened but not device-proven.',
@@ -160,10 +160,10 @@ export const selfTapeOpsData: SelfTapeOpsData = {
   ],
   decisions: [
     {
-      title: 'When Expo clears, do we spend one more TestFlight build immediately?',
-      neededFrom: 'Philip approval after Mildred confirms EAS health and clean repo state.',
-      recommendation: 'Yes — one monitored retry is worth it because Builds 276/277 failed before Xcode and local gates passed.',
-      timing: 'As soon as Expo iOS worker incident is resolved.',
+      title: 'When Build 278 appears in TestFlight, should Philip run the full trust-gate script?',
+      neededFrom: 'Philip when ready for device testing.',
+      recommendation: 'Yes — one focused pass is more useful than casual testing because it will prove or isolate the core actor journey.',
+      timing: 'When Apple/TestFlight processing completes and Philip has a quiet window.',
     },
     {
       title: 'Should new feature work pause after the next build?',
@@ -180,9 +180,9 @@ export const selfTapeOpsData: SelfTapeOpsData = {
   ],
   watchedSignals: [
     {
-      signal: 'Expo/EAS iOS worker status',
-      whyItMatters: 'Builds 276 and 277 failed before Xcode, so this is the immediate build blocker.',
-      response: 'Retry once only after the incident clears; do not burn attempts while degraded.',
+      signal: 'Apple/TestFlight Build 278 processing and diagnostics events',
+      whyItMatters: 'Build 278 is the current trust-gate build; device use should produce either confidence or actionable redacted diagnostic events.',
+      response: 'Wait for Philip readiness, then monitor import/reader/record/export failures by build and flow.',
     },
     {
       signal: 'Philip device feedback after next TestFlight',
@@ -202,11 +202,11 @@ export const selfTapeOpsData: SelfTapeOpsData = {
   ],
   actionPackets: [
     {
-      title: 'EAS recovery and Build 278 retry packet',
-      owner: 'Mildred',
-      status: 'blocked',
-      approvalNeeded: true,
-      nextStep: 'Wait for Expo incident to clear, verify repo is clean, then request/execute one monitored build retry.',
+      title: 'Build 278 device-truth packet',
+      owner: 'Shared',
+      status: 'ready',
+      approvalNeeded: false,
+      nextStep: 'When Philip is ready, run the focused trust-gate script and watch Mission Control diagnostics for failure clusters.',
     },
     {
       title: 'Next device-test script',
@@ -235,6 +235,56 @@ export const selfTapeOpsData: SelfTapeOpsData = {
       status: 'waiting',
       approvalNeeded: true,
       nextStep: 'Hold until product trust is proven; then draft actor-facing launch story, demo script, and beta-user plan.',
+    },
+  ],
+
+  deviceTestScript: [
+    {
+      title: 'Import William and confirm scene/role truth',
+      purpose: 'Prove the parser/display path preserves the audition scenes and maps WILLIAM OLESON to WILLIAM without making actor lines reader lines.',
+      steps: [
+        'Install/open Build 278 when it is available in TestFlight.',
+        'Import the William sides from the same PDF used in Build 275 testing.',
+        'Confirm Scene 1 and Scene 2 are both reachable.',
+        'Choose William/Oleson as the actor role and inspect that William actor lines are not assigned to AI reader voices.',
+      ],
+      passSignal: 'Both scenes are visible, role aliasing is clear, and missing-line/stage-direction contamination is not obvious.',
+      failureEvidence: 'Send diagnostics immediately and note the exact missing or contaminated line.',
+    },
+    {
+      title: 'Reader-only / Rehearse hands-free feel',
+      purpose: 'Prove Rehearse can behave like Record Audition without camera pressure.',
+      steps: [
+        'From Voice Setup, start Reader-only/Rehearse on William Scene 2.',
+        'Speak actor lines naturally and pause after each line.',
+        'Use Change Scene once and confirm you can switch scenes without feeling trapped.',
+      ],
+      passSignal: 'AI cues advance after actor silence, current/context lines are readable, and scene switching is obvious.',
+      failureEvidence: 'Note whether it failed to hear you, advanced too early, skipped lines, or trapped you in the wrong scene.',
+    },
+    {
+      title: 'Record audition live reader audio',
+      purpose: 'Answer the device-only trust gate: can NativeCapture record video while playing audible AI cues on the intended route?',
+      steps: [
+        'Start Record Audition from the prepared scene.',
+        'Confirm there is no visible Supabase/sign-in gate.',
+        'Record through at least two AI cue turns.',
+        'Keep the take and move directly to review.',
+      ],
+      passSignal: 'AI cue is visible and actually audible during recording; recording completes with audio/video and routes directly to review.',
+      failureEvidence: 'If reader audio is silent/fails, send diagnostics before restarting and note speaker/Bluetooth/headphone state.',
+    },
+    {
+      title: 'Review, combined export, and separate-scene export',
+      purpose: 'Prove delivery compliance does not create fake success or confusing artifacts.',
+      steps: [
+        'Pick keeper take(s) by parsed scene in Takes Review.',
+        'Choose combined delivery and verify preview/export completes.',
+        'Choose separate scene delivery and verify prepared files are labeled sensibly.',
+        'Listen to exported output for doubled/echoed AI or missing actor/reader audio.',
+      ],
+      passSignal: 'Combined and separate outputs are understandable, shareable, and audio sounds honest enough for the next focused fix decision.',
+      failureEvidence: 'Keep the failed export state intact, send diagnostics, and note which output sounded wrong or was mislabeled.',
     },
   ],
 };

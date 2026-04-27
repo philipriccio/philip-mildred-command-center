@@ -133,6 +133,12 @@ export interface SelfTapeLiveStatus {
   head: string | null;
   dirty: boolean;
   buildNumber: string | null;
+  appleProcessing: {
+    build: string;
+    status: 'processing' | 'available' | 'unknown';
+    testFlightUrl: string;
+    submittedAt: string | null;
+  };
   easIncident: {
     active: boolean;
     title: string | null;
@@ -155,17 +161,12 @@ export interface DiagnosticEventRow {
   severity: 'info' | 'warning' | 'error' | 'critical';
   flow: string | null;
   screen: string | null;
-  project_id: string | null;
-  scene_id: string | null;
-  take_id: string | null;
   error_code: string | null;
   message: string | null;
   app_platform: string | null;
   app_version: string | null;
   build_number: string | null;
-  device_name: string | null;
   os_version: string | null;
-  metadata: Record<string, unknown> | null;
 }
 
 export interface SelfTapeDiagnosticsResponse {
@@ -182,6 +183,9 @@ export interface SelfTapeDiagnosticsResponse {
     byBuild: Array<{ buildNumber: string; count: number }>;
     byFlow: Array<{ flow: string; count: number }>;
     byType: Array<{ eventType: string; count: number; latestAt: string | null }>;
+    lastEventAt: string | null;
+    readiness: 'no-events' | 'quiet' | 'watch' | 'investigate';
+    recommendation: string;
   };
   error?: string;
 }
@@ -238,6 +242,13 @@ export interface SelfTapeOpsData {
     status: 'ready' | 'waiting' | 'blocked' | 'in_progress';
     approvalNeeded: boolean;
     nextStep: string;
+  }>;
+  deviceTestScript: Array<{
+    title: string;
+    purpose: string;
+    steps: string[];
+    passSignal: string;
+    failureEvidence: string;
   }>;
 }
 

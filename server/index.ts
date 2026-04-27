@@ -51,11 +51,26 @@ interface DiagnosticEventRow {
   metadata: Record<string, unknown> | null;
 }
 
+interface SafeDiagnosticEventRow {
+  id: string;
+  created_at: string;
+  event_type: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  flow: string | null;
+  screen: string | null;
+  error_code: string | null;
+  message: string | null;
+  app_platform: string | null;
+  app_version: string | null;
+  build_number: string | null;
+  os_version: string | null;
+}
+
 interface DiagnosticEventsResponse {
   configured: boolean;
   source: string;
   checkedAt: number;
-  events: DiagnosticEventRow[];
+  events: SafeDiagnosticEventRow[];
   summary: {
     total: number;
     critical: number;
@@ -65,6 +80,9 @@ interface DiagnosticEventsResponse {
     byBuild: Array<{ buildNumber: string; count: number }>;
     byFlow: Array<{ flow: string; count: number }>;
     byType: Array<{ eventType: string; count: number; latestAt: string | null }>;
+    lastEventAt: string | null;
+    readiness: 'no-events' | 'quiet' | 'watch' | 'investigate';
+    recommendation: string;
   };
   error?: string;
 }
@@ -1704,10 +1722,30 @@ function emptyDiagnosticSummary() {
     byBuild: [],
     byFlow: [],
     byType: [],
+    lastEventAt: null,
+    readiness: 'no-events' as const,
+    recommendation: 'No diagnostic events are visible yet. This can mean Build 278 has not been tested, telemetry is not configured, or no failures have occurred.',
   };
 }
 
-function summarizeDiagnosticEvents(events: DiagnosticEventRow[]) {
+function sanitizeDiagnosticEvent(event: DiagnosticEventRow): SafeDiagnosticEventRow {
+  return {
+    id: event.id,
+    created_at: event.created_at,
+    event_type: event.event_type,
+    severity: event.severity,
+    flow: event.flow,
+    screen: event.screen,
+    error_code: event.error_code,
+    message: event.message,
+    app_platform: event.app_platform,
+    app_version: event.app_version,
+    build_number: event.build_number,
+    os_version: event.os_version,
+  };
+}
+
+function summarizeDiagnosticEvents(events: SafeDiagnosticEventRow[]) {
   const summary = emptyDiagnosticSummary();
   summary.total = events.length;
   const byBuild = new Map<string, number>();
@@ -1720,6 +1758,7 @@ function summarizeDiagnosticEvents(events: DiagnosticEventRow[]) {
     else if (event.severity === 'warning') summary.warning += 1;
     else summary.info += 1;
 
+    if (!summary.lastEventAt || event.created_at > summary.lastEventAt) summary.lastEventAt = event.created_at;
     const build = event.build_number ?? 'unknown';
     byBuild.set(build, (byBuild.get(build) ?? 0) + 1);
     const flow = event.flow ?? 'unknown';
@@ -1742,6 +1781,17 @@ function summarizeDiagnosticEvents(events: DiagnosticEventRow[]) {
     .map(([eventType, value]) => ({ eventType, ...value }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
+
+  if (summary.critical > 0 || summary.error > 0) {
+    summary.readiness = 'investigate';
+    summary.recommendation = 'Investigate diagnostic failures before treating Build 278 as a trust pass.';
+  } else if (summary.warning > 0) {
+    summary.readiness = 'watch';
+    summary.recommendation = 'Warnings are present. Continue the device script, but review patterns before the next build decision.';
+  } else if (summary.total > 0) {
+    summary.readiness = 'quiet';
+    summary.recommendation = 'Telemetry is arriving and no warning/error events are visible in the current sample.';
+  }
   return summary;
 }
 
@@ -1783,7 +1833,8 @@ async function fetchDiagnosticEvents(limit: number): Promise<DiagnosticEventsRes
         error: `Supabase diagnostic event query failed: ${response.status} ${body.slice(0, 240)}`,
       };
     }
-    const events = await response.json() as DiagnosticEventRow[];
+    const rawEvents = await response.json() as DiagnosticEventRow[];
+    const events = rawEvents.map(sanitizeDiagnosticEvent);
     return {
       configured: true,
       source: config.projectRef ?? config.url,
@@ -1829,6 +1880,12 @@ app.get('/api/selftape/diagnostics', async (req, res) => {
 });
 
 app.post('/api/selftape/diagnostics/access-token', (req, res) => {
+  const remoteAddress = req.socket.remoteAddress;
+  const isLocalRequest = !remoteAddress || remoteAddress === '127.0.0.1' || remoteAddress === '::1' || remoteAddress === '::ffff:127.0.0.1';
+  if (!isLocalRequest || process.env.ENABLE_SELFTAPE_TOKEN_WRITE !== '1') {
+    res.status(403).json({ ok: false, error: 'Token storage is disabled unless explicitly enabled for localhost.' });
+    return;
+  }
   const { token } = req.body as { token?: string };
   if (!token || !token.startsWith('sbp_')) {
     res.status(400).json({ ok: false, error: 'Expected a Supabase personal access token.' });

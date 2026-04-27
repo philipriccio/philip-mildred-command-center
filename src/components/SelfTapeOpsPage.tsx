@@ -170,9 +170,29 @@ export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
         )}
       </Panel>
 
-      <Panel title="Diagnostic event radar" subtitle="Privacy-safe production/TestFlight events from Self-e-Tape. No scripts, PDFs, audio, video, or casting notes are collected here.">
+      <Panel title="Build 278 device-test packet" subtitle="A focused trust-gate pass for when Philip is ready. This is the path that turns Build 278 from uploaded binary into product evidence.">
+        <div className="grid gap-3 lg:grid-cols-2">
+          {data.deviceTestScript.map((item) => (
+            <div key={item.title} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+              <h3 className="font-semibold text-slate-100">{item.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{item.purpose}</p>
+              <ol className="mt-3 space-y-1 text-sm leading-6 text-slate-300">
+                {item.steps.map((step, index) => <li key={step}>{index + 1}. {step}</li>)}
+              </ol>
+              <p className="mt-3 rounded-xl border border-emerald-400/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-100"><span className="font-medium">Pass: </span>{item.passSignal}</p>
+              <p className="mt-2 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100"><span className="font-medium">If it fails: </span>{item.failureEvidence}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
+
+      <Panel title="Diagnostic event radar" subtitle="Privacy-safe production/TestFlight events from Self-e-Tape. No scripts, PDFs, audio, video, casting notes, raw metadata, device names, or project/take IDs are shown here.">
         {diagnostics ? (
           <div className="space-y-4">
+            <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4 text-sm leading-6 text-blue-100">
+              <span className="font-semibold">Radar read: </span>{diagnostics.summary.recommendation}
+              {diagnostics.summary.lastEventAt && <span className="block text-xs text-blue-200/80">Last event: {new Date(diagnostics.summary.lastEventAt).toLocaleString()}</span>}
+            </div>
             {diagnostics.error && (
               <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
                 {diagnostics.error}
