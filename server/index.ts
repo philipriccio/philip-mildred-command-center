@@ -29,6 +29,46 @@ interface JsonObject {
   [key: string]: JsonValue;
 }
 
+
+interface DiagnosticEventRow {
+  id: string;
+  created_at: string;
+  user_id: string | null;
+  event_type: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  flow: string | null;
+  screen: string | null;
+  project_id: string | null;
+  scene_id: string | null;
+  take_id: string | null;
+  error_code: string | null;
+  message: string | null;
+  app_platform: string | null;
+  app_version: string | null;
+  build_number: string | null;
+  device_name: string | null;
+  os_version: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+interface DiagnosticEventsResponse {
+  configured: boolean;
+  source: string;
+  checkedAt: number;
+  events: DiagnosticEventRow[];
+  summary: {
+    total: number;
+    critical: number;
+    error: number;
+    warning: number;
+    info: number;
+    byBuild: Array<{ buildNumber: string; count: number }>;
+    byFlow: Array<{ flow: string; count: number }>;
+    byType: Array<{ eventType: string; count: number; latestAt: string | null }>;
+  };
+  error?: string;
+}
+
 interface AgentRow {
   id: string;
   name: string;
@@ -1559,12 +1599,144 @@ async function readExpoIncident() {
   try {
     const response = await fetch('https://status.expo.dev/');
     const text = await response.text();
-    const active = /iOS Builds fail to start|Mac workers fail to start|EAS Build.*degraded/i.test(text);
-    const title = text.match(/iOS Builds fail to start/i)?.[0] ?? null;
-    const summary = text.match(/Mac workers fail to start[^<\n]*/i)?.[0] ?? null;
+    const currentStatusText = text.split('Uptime over the past 90 days')[0] ?? text;
+    const allOperational = /All Systems Operational/i.test(currentStatusText);
+    const active = !allOperational && /iOS Builds fail to start|Mac workers fail to start|EAS Build.*degraded/i.test(currentStatusText);
+    const title = active ? currentStatusText.match(/iOS Builds fail to start/i)?.[0] ?? null : null;
+    const summary = active ? currentStatusText.match(/Mac workers fail to start[^<\n]*/i)?.[0] ?? null : null;
     return { active, title, summary, checkedAt };
   } catch {
     return { active: false, title: null, summary: 'Expo status unavailable', checkedAt };
+  }
+}
+
+
+function getSelfTapeSupabaseConfig() {
+  const selfTapePath = '/Users/mildred/.openclaw/workspace/projects/SelfTapeApp';
+  const projectRef = process.env.SELFTAPE_SUPABASE_PROJECT_REF
+    ?? readOptionalText(path.join(selfTapePath, 'supabase/.temp/project-ref'));
+  const anonKey = process.env.SELFTAPE_SUPABASE_ANON_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SELFTAPE_SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = process.env.SELFTAPE_SUPABASE_URL
+    ?? process.env.EXPO_PUBLIC_SUPABASE_URL
+    ?? (projectRef ? `https://${projectRef}.supabase.co` : null);
+  const authKey = serviceRoleKey ?? anonKey ?? null;
+  return { selfTapePath, projectRef, url, authKey, usingServiceRole: Boolean(serviceRoleKey) };
+}
+
+function readOptionalText(filePath: string) {
+  try {
+    return fs.readFileSync(filePath, 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function emptyDiagnosticSummary() {
+  return {
+    total: 0,
+    critical: 0,
+    error: 0,
+    warning: 0,
+    info: 0,
+    byBuild: [],
+    byFlow: [],
+    byType: [],
+  };
+}
+
+function summarizeDiagnosticEvents(events: DiagnosticEventRow[]) {
+  const summary = emptyDiagnosticSummary();
+  summary.total = events.length;
+  const byBuild = new Map<string, number>();
+  const byFlow = new Map<string, number>();
+  const byType = new Map<string, { count: number; latestAt: string | null }>();
+
+  for (const event of events) {
+    if (event.severity === 'critical') summary.critical += 1;
+    else if (event.severity === 'error') summary.error += 1;
+    else if (event.severity === 'warning') summary.warning += 1;
+    else summary.info += 1;
+
+    const build = event.build_number ?? 'unknown';
+    byBuild.set(build, (byBuild.get(build) ?? 0) + 1);
+    const flow = event.flow ?? 'unknown';
+    byFlow.set(flow, (byFlow.get(flow) ?? 0) + 1);
+    const existing = byType.get(event.event_type) ?? { count: 0, latestAt: null };
+    existing.count += 1;
+    if (!existing.latestAt || event.created_at > existing.latestAt) existing.latestAt = event.created_at;
+    byType.set(event.event_type, existing);
+  }
+
+  summary.byBuild = Array.from(byBuild.entries())
+    .map(([buildNumber, count]) => ({ buildNumber, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  summary.byFlow = Array.from(byFlow.entries())
+    .map(([flow, count]) => ({ flow, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8);
+  summary.byType = Array.from(byType.entries())
+    .map(([eventType, value]) => ({ eventType, ...value }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 10);
+  return summary;
+}
+
+async function fetchDiagnosticEvents(limit: number): Promise<DiagnosticEventsResponse> {
+  const checkedAt = Date.now();
+  const config = getSelfTapeSupabaseConfig();
+  if (!config.url || !config.authKey) {
+    return {
+      configured: false,
+      source: config.url ?? 'unconfigured',
+      checkedAt,
+      events: [],
+      summary: emptyDiagnosticSummary(),
+      error: 'Set SELFTAPE_SUPABASE_SERVICE_ROLE_KEY or SELFTAPE_SUPABASE_ANON_KEY on the Command Center server to read diagnostic events.',
+    };
+  }
+
+  const endpoint = new URL('/rest/v1/diagnostic_events', config.url);
+  endpoint.searchParams.set('select', 'id,created_at,user_id,event_type,severity,flow,screen,project_id,scene_id,take_id,error_code,message,app_platform,app_version,build_number,device_name,os_version,metadata');
+  endpoint.searchParams.set('order', 'created_at.desc');
+  endpoint.searchParams.set('limit', String(limit));
+
+  try {
+    const response = await fetch(endpoint, {
+      headers: {
+        apikey: config.authKey,
+        Authorization: `Bearer ${config.authKey}`,
+      },
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      return {
+        configured: true,
+        source: config.projectRef ?? config.url,
+        checkedAt,
+        events: [],
+        summary: emptyDiagnosticSummary(),
+        error: `Supabase diagnostic event query failed: ${response.status} ${body.slice(0, 240)}`,
+      };
+    }
+    const events = await response.json() as DiagnosticEventRow[];
+    return {
+      configured: true,
+      source: config.projectRef ?? config.url,
+      checkedAt,
+      events,
+      summary: summarizeDiagnosticEvents(events),
+    };
+  } catch (error) {
+    return {
+      configured: true,
+      source: config.projectRef ?? config.url,
+      checkedAt,
+      events: [],
+      summary: emptyDiagnosticSummary(),
+      error: error instanceof Error ? error.message : String(error),
+    };
   }
 }
 
@@ -1584,6 +1756,13 @@ app.get('/api/selftape/status', async (_req, res) => {
       : 'Run one monitored production iOS build retry, then submit to TestFlight only if it completes cleanly.';
 
   res.json({ branch, head, dirty, buildNumber, easIncident, buildAttempts, recommendedAction, sourcePath });
+});
+
+app.get('/api/selftape/diagnostics', async (req, res) => {
+  const limitParam = Number(req.query.limit ?? 80);
+  const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.round(limitParam), 1), 250) : 80;
+  const diagnostics = await fetchDiagnosticEvents(limit);
+  res.json(diagnostics);
 });
 
 app.get('/api/dashboard/stats', (_req, res) => {

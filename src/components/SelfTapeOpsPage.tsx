@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { selfTapeOpsData } from '../selfTapeOperatingSystem';
-import type { OpsStatus, SelfTapeLiveStatus } from '../types';
+import type { DiagnosticEventRow, OpsStatus, SelfTapeDiagnosticsResponse, SelfTapeLiveStatus } from '../types';
 import { Panel } from './ui';
 
 const statusStyles: Record<OpsStatus, string> = {
@@ -20,6 +20,13 @@ const packetStatusStyles: Record<string, string> = {
   in_progress: 'border-blue-400/30 bg-blue-500/10 text-blue-100',
   waiting: 'border-amber-400/30 bg-amber-500/10 text-amber-100',
   blocked: 'border-rose-400/30 bg-rose-500/10 text-rose-100',
+};
+
+const diagnosticSeverityStyles: Record<DiagnosticEventRow['severity'], string> = {
+  critical: 'border-rose-400/40 bg-rose-500/10 text-rose-100',
+  error: 'border-orange-400/40 bg-orange-500/10 text-orange-100',
+  warning: 'border-amber-400/40 bg-amber-500/10 text-amber-100',
+  info: 'border-blue-400/30 bg-blue-500/10 text-blue-100',
 };
 
 function StatusPill({ status }: { status: OpsStatus }) {
@@ -46,6 +53,8 @@ export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
   const data = selfTapeOpsData;
   const [liveStatus, setLiveStatus] = useState<SelfTapeLiveStatus | null>(null);
   const [liveError, setLiveError] = useState<string | null>(null);
+  const [diagnostics, setDiagnostics] = useState<SelfTapeDiagnosticsResponse | null>(null);
+  const [diagnosticsError, setDiagnosticsError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +68,22 @@ export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
       })
       .catch((error: unknown) => {
         if (!cancelled) setLiveError(error instanceof Error ? error.message : 'Status unavailable');
+      });
+    return () => { cancelled = true; };
+  }, [apiBase]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiBase}/api/selftape/diagnostics?limit=80`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Diagnostics request failed: ${response.status}`);
+        return response.json() as Promise<SelfTapeDiagnosticsResponse>;
+      })
+      .then((payload) => {
+        if (!cancelled) setDiagnostics(payload);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setDiagnosticsError(error instanceof Error ? error.message : 'Diagnostics unavailable');
       });
     return () => { cancelled = true; };
   }, [apiBase]);
@@ -141,6 +166,96 @@ export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
         ) : (
           <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
             {liveError ? `Live status unavailable: ${liveError}` : 'Loading live Self-e-Tape status…'}
+          </div>
+        )}
+      </Panel>
+
+      <Panel title="Diagnostic event radar" subtitle="Privacy-safe production/TestFlight events from Self-e-Tape. No scripts, PDFs, audio, video, or casting notes are collected here.">
+        {diagnostics ? (
+          <div className="space-y-4">
+            {diagnostics.error && (
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
+                {diagnostics.error}
+              </div>
+            )}
+            <div className="grid gap-3 md:grid-cols-5">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Total</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-100">{diagnostics.summary.total}</p>
+              </div>
+              <div className="rounded-2xl border border-rose-400/30 bg-rose-500/10 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-rose-200">Critical</p>
+                <p className="mt-2 text-2xl font-semibold text-rose-100">{diagnostics.summary.critical}</p>
+              </div>
+              <div className="rounded-2xl border border-orange-400/30 bg-orange-500/10 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-orange-200">Errors</p>
+                <p className="mt-2 text-2xl font-semibold text-orange-100">{diagnostics.summary.error}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-amber-200">Warnings</p>
+                <p className="mt-2 text-2xl font-semibold text-amber-100">{diagnostics.summary.warning}</p>
+              </div>
+              <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-blue-200">Info</p>
+                <p className="mt-2 text-2xl font-semibold text-blue-100">{diagnostics.summary.info}</p>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-3">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">By build</p>
+                <div className="mt-3 space-y-2">
+                  {diagnostics.summary.byBuild.length ? diagnostics.summary.byBuild.map((item) => (
+                    <div key={item.buildNumber} className="flex justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">
+                      <span>{item.buildNumber}</span><span className="font-semibold text-slate-100">{item.count}</span>
+                    </div>
+                  )) : <p className="text-sm text-slate-500">No events yet.</p>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">By flow</p>
+                <div className="mt-3 space-y-2">
+                  {diagnostics.summary.byFlow.length ? diagnostics.summary.byFlow.map((item) => (
+                    <div key={item.flow} className="flex justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">
+                      <span>{item.flow}</span><span className="font-semibold text-slate-100">{item.count}</span>
+                    </div>
+                  )) : <p className="text-sm text-slate-500">No events yet.</p>}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Top event types</p>
+                <div className="mt-3 space-y-2">
+                  {diagnostics.summary.byType.length ? diagnostics.summary.byType.slice(0, 5).map((item) => (
+                    <div key={item.eventType} className="rounded-xl border border-slate-800 bg-slate-900/70 px-3 py-2 text-sm text-slate-300">
+                      <div className="flex justify-between gap-3"><span className="truncate">{item.eventType}</span><span className="font-semibold text-slate-100">{item.count}</span></div>
+                    </div>
+                  )) : <p className="text-sm text-slate-500">No events yet.</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              {diagnostics.events.slice(0, 8).map((event) => (
+                <div key={event.id} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="font-semibold text-slate-100">{event.event_type}</h3>
+                      <p className="mt-1 text-xs text-slate-500">{new Date(event.created_at).toLocaleString()} · build {event.build_number ?? 'unknown'} · {event.flow ?? 'unknown flow'}{event.screen ? ` / ${event.screen}` : ''}</p>
+                    </div>
+                    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${diagnosticSeverityStyles[event.severity]}`}>{event.severity}</span>
+                  </div>
+                  {(event.error_code || event.message) && (
+                    <p className="mt-3 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-sm leading-6 text-slate-300">
+                      {event.error_code && <span className="font-medium text-slate-100">{event.error_code}: </span>}{event.message}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
+            {diagnosticsError ? `Diagnostics unavailable: ${diagnosticsError}` : 'Loading diagnostic event radar…'}
           </div>
         )}
       </Panel>

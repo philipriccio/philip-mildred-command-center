@@ -193,3 +193,12 @@ This confirms the project was considered active and worth preserving alongside o
   - Action packets, with owner/status/approval-needed/next step.
 - This turns the Ops tab from a status dashboard into the first version of a proactive operating board: what I can move, what is blocked, what needs Philip, and what I am watching.
 - Verification: `npm run build` and `git diff --check` passed.
+
+### SelfTape diagnostics radar — Apr 27
+- Added a Mission Control diagnostics backend endpoint: `/api/selftape/diagnostics`.
+- The endpoint reads recent SelfTape `diagnostic_events` from Supabase when the Command Center server has `SELFTAPE_SUPABASE_SERVICE_ROLE_KEY` or `SELFTAPE_SUPABASE_ANON_KEY` available.
+- The API returns recent redacted events plus summary counts by severity, build number, flow, and event type.
+- Added a Self-e-Tape Ops dashboard "Diagnostic event radar" panel showing totals, severity counts, build/flow/type clustering, and the latest events.
+- If Supabase read credentials are not configured, the panel fails closed with setup guidance instead of exposing or guessing data.
+- Fixed the Expo status parser to avoid treating historical incident text as an active EAS outage when the current status says all systems operational.
+- Verification: `npm run build` passed.

@@ -148,6 +148,44 @@ export interface SelfTapeLiveStatus {
   sourcePath: string;
 }
 
+export interface DiagnosticEventRow {
+  id: string;
+  created_at: string;
+  event_type: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  flow: string | null;
+  screen: string | null;
+  project_id: string | null;
+  scene_id: string | null;
+  take_id: string | null;
+  error_code: string | null;
+  message: string | null;
+  app_platform: string | null;
+  app_version: string | null;
+  build_number: string | null;
+  device_name: string | null;
+  os_version: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
+export interface SelfTapeDiagnosticsResponse {
+  configured: boolean;
+  source: string;
+  checkedAt: number;
+  events: DiagnosticEventRow[];
+  summary: {
+    total: number;
+    critical: number;
+    error: number;
+    warning: number;
+    info: number;
+    byBuild: Array<{ buildNumber: string; count: number }>;
+    byFlow: Array<{ flow: string; count: number }>;
+    byType: Array<{ eventType: string; count: number; latestAt: string | null }>;
+  };
+  error?: string;
+}
+
 export interface SelfTapeOpsData {
   northStar: {
     goal: string;
