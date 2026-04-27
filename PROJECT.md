@@ -185,3 +185,11 @@ This confirms the project was considered active and worth preserving alongside o
 - Default behavior remains local/dev split (`localhost:5173` frontend, `localhost:3001` API); public serving is off unless explicitly enabled.
 - Frontend API fallback now uses `window.location.origin` when no `VITE_API_BASE_URL` is set, allowing a same-origin private/tunnel deployment without hardcoding `localhost:3001`.
 - Verification: `npm run build` and `git diff --check` passed.
+
+## Self-e-Tape Ops actionable layer — Apr 27, 2026
+- Added actionable operating-state sections to the Self-e-Tape Ops page:
+  - Decisions needed, with Mildred recommendations and timing.
+  - Watched signals, with why each matters and how Mildred should respond.
+  - Action packets, with owner/status/approval-needed/next step.
+- This turns the Ops tab from a status dashboard into the first version of a proactive operating board: what I can move, what is blocked, what needs Philip, and what I am watching.
+- Verification: `npm run build` and `git diff --check` passed.

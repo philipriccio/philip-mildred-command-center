@@ -183,6 +183,24 @@ export interface SelfTapeOpsData {
     impact: string;
     nextAction: string;
   }>;
+  decisions: Array<{
+    title: string;
+    neededFrom: string;
+    recommendation: string;
+    timing: string;
+  }>;
+  watchedSignals: Array<{
+    signal: string;
+    whyItMatters: string;
+    response: string;
+  }>;
+  actionPackets: Array<{
+    title: string;
+    owner: 'Mildred' | 'Philip' | 'Dev' | 'Janet' | 'Shared';
+    status: 'ready' | 'waiting' | 'blocked' | 'in_progress';
+    approvalNeeded: boolean;
+    nextStep: string;
+  }>;
 }
 
 export interface TaskDraft {

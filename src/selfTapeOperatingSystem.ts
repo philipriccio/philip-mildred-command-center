@@ -158,4 +158,83 @@ export const selfTapeOpsData: SelfTapeOpsData = {
       nextAction: 'Validate clarity in Takes Review and make the export package feel inevitable.',
     },
   ],
+  decisions: [
+    {
+      title: 'When Expo clears, do we spend one more TestFlight build immediately?',
+      neededFrom: 'Philip approval after Mildred confirms EAS health and clean repo state.',
+      recommendation: 'Yes — one monitored retry is worth it because Builds 276/277 failed before Xcode and local gates passed.',
+      timing: 'As soon as Expo iOS worker incident is resolved.',
+    },
+    {
+      title: 'Should new feature work pause after the next build?',
+      neededFrom: 'Philip strategic alignment.',
+      recommendation: 'Yes. Freeze recording/export surface changes until device proof confirms the current actor journey.',
+      timing: 'Before starting any new Self-e-Tape feature beyond bug fixes.',
+    },
+    {
+      title: 'What counts as minimum launch trust?',
+      neededFrom: 'Philip + Mildred product judgment after next device test.',
+      recommendation: 'Require one clean import → rehearse/record → keep → review → export pass with honest diagnostics before calling beta confidence.',
+      timing: 'Immediately after the next TestFlight device session.',
+    },
+  ],
+  watchedSignals: [
+    {
+      signal: 'Expo/EAS iOS worker status',
+      whyItMatters: 'Builds 276 and 277 failed before Xcode, so this is the immediate build blocker.',
+      response: 'Retry once only after the incident clears; do not burn attempts while degraded.',
+    },
+    {
+      signal: 'Philip device feedback after next TestFlight',
+      whyItMatters: 'Device truth outranks local tests for recording, routing, live reader audio, export, and UX clarity.',
+      response: 'Convert feedback into classified findings: device bug, UX confusion, parser issue, architecture issue, or product gap.',
+    },
+    {
+      signal: 'Any fake-success path in recording/export/editing',
+      whyItMatters: 'Actor trust collapses if the app says success when reader audio, saved audio, or export output is degraded.',
+      response: 'Block, surface honestly, or require explicit degraded-output confirmation.',
+    },
+    {
+      signal: 'Competitor workflow advantages',
+      whyItMatters: 'The goal is market leadership, not just a working app.',
+      response: 'Keep a weekly benchmark against Linus, coldRead, OnBook, and actor workflow expectations.',
+    },
+  ],
+  actionPackets: [
+    {
+      title: 'EAS recovery and Build 278 retry packet',
+      owner: 'Mildred',
+      status: 'blocked',
+      approvalNeeded: true,
+      nextStep: 'Wait for Expo incident to clear, verify repo is clean, then request/execute one monitored build retry.',
+    },
+    {
+      title: 'Next device-test script',
+      owner: 'Mildred',
+      status: 'ready',
+      approvalNeeded: false,
+      nextStep: 'Prepare a concise William/Chuck test checklist covering import, role alias, reader preload/playback, recording, keep/review/export, diagnostics.',
+    },
+    {
+      title: 'Actor trust audit packet',
+      owner: 'Mildred',
+      status: 'ready',
+      approvalNeeded: false,
+      nextStep: 'Walk the app journey as an actor and identify every point where confusion, uncertainty, or false confidence can happen.',
+    },
+    {
+      title: 'Reader-only wedge packet',
+      owner: 'Mildred',
+      status: 'waiting',
+      approvalNeeded: false,
+      nextStep: 'After device proof, decide whether reader-only deserves its own product lane and onboarding emphasis.',
+    },
+    {
+      title: 'Launch awareness packet',
+      owner: 'Shared',
+      status: 'waiting',
+      approvalNeeded: true,
+      nextStep: 'Hold until product trust is proven; then draft actor-facing launch story, demo script, and beta-user plan.',
+    },
+  ],
 };

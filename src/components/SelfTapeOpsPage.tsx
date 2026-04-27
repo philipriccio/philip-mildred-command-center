@@ -15,6 +15,13 @@ const dotStyles: Record<OpsStatus, string> = {
   red: 'bg-rose-400',
 };
 
+const packetStatusStyles: Record<string, string> = {
+  ready: 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100',
+  in_progress: 'border-blue-400/30 bg-blue-500/10 text-blue-100',
+  waiting: 'border-amber-400/30 bg-amber-500/10 text-amber-100',
+  blocked: 'border-rose-400/30 bg-rose-500/10 text-rose-100',
+};
+
 function StatusPill({ status }: { status: OpsStatus }) {
   return (
     <span className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${statusStyles[status]}`}>
@@ -181,6 +188,53 @@ export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
           </div>
         </Panel>
       </section>
+
+      <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+        <Panel title="Decisions needed" subtitle="These are the points where I should prepare the recommendation, but Philip owns the call.">
+          <div className="space-y-3">
+            {data.decisions.map((decision) => (
+              <div key={decision.title} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <h3 className="font-semibold text-slate-100">{decision.title}</h3>
+                <p className="mt-2 text-sm text-slate-400">Needed from: {decision.neededFrom}</p>
+                <p className="mt-3 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-sm leading-6 text-slate-200">
+                  <span className="font-medium text-slate-100">Recommendation: </span>{decision.recommendation}
+                </p>
+                <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500">Timing: {decision.timing}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+
+        <Panel title="Action packets" subtitle="Work I can move, hold, or bring for approval without waiting for a vague prompt.">
+          <div className="space-y-3">
+            {data.actionPackets.map((packet) => (
+              <div key={packet.title} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h3 className="font-semibold text-slate-100">{packet.title}</h3>
+                    <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-500">Owner: {packet.owner}</p>
+                  </div>
+                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold uppercase tracking-wide ${packetStatusStyles[packet.status] ?? 'border-slate-700 bg-slate-800 text-slate-200'}`}>{packet.status.replace('_', ' ')}</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-300">{packet.nextStep}</p>
+                {packet.approvalNeeded && <p className="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-200">Approval needed</p>}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </section>
+
+      <Panel title="Watched signals" subtitle="The signals I should keep scanning so I can come to Philip with strategy instead of waiting.">
+        <div className="grid gap-3 lg:grid-cols-2">
+          {data.watchedSignals.map((signal) => (
+            <div key={signal.signal} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+              <h3 className="font-semibold text-slate-100">{signal.signal}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-400">{signal.whyItMatters}</p>
+              <p className="mt-3 rounded-xl border border-slate-800 bg-slate-900/80 px-3 py-2 text-sm text-slate-300"><span className="font-medium text-slate-100">Response: </span>{signal.response}</p>
+            </div>
+          ))}
+        </div>
+      </Panel>
 
       <section className="grid gap-6 xl:grid-cols-2">
         <Panel title="Risks I am watching">
