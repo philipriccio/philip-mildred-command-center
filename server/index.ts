@@ -205,6 +205,9 @@ interface ActivityEntry {
   summary: string;
 }
 
+const LIVE_AGENT_ACTIVITY_TTL_MS = 45_000;
+const liveAgentActivity = new Map<string, { officeState: string; taskLabel: string | null; lastSeen: number }>();
+
 interface ProjectRow {
   id: string;
   name: string;
@@ -781,7 +784,7 @@ function deriveOfficeState(task: TaskRow | null) {
     return { officeState: 'working', taskProgress: 60, taskTitle: task.title };
   }
   if (task.status === 'ready') {
-    return { officeState: 'working', taskProgress: 20, taskTitle: task.title };
+    return { officeState: 'reserved', taskProgress: 20, taskTitle: task.title };
   }
   return { officeState: 'inactive', taskProgress: 0, taskTitle: null as string | null };
 }
@@ -790,7 +793,12 @@ function syncOfficeAgentForTask(task: TaskRow) {
   if (!task.agent_id) return;
   const officeAgent = selectOfficeAgentById.get(task.agent_id);
   if (!officeAgent) return;
-  const { officeState, taskProgress, taskTitle } = deriveOfficeState(task);
+  const live = liveAgentActivity.get(task.agent_id);
+  const liveIsFresh = live ? Date.now() - live.lastSeen < LIVE_AGENT_ACTIVITY_TTL_MS : false;
+  const derived = deriveOfficeState(task);
+  const officeState = liveIsFresh ? live!.officeState : derived.officeState;
+  const taskTitle = liveIsFresh ? live!.taskLabel : derived.taskTitle;
+  const taskProgress = liveIsFresh ? Math.max(derived.taskProgress, 65) : derived.taskProgress;
   db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
     .run(officeState, taskTitle, taskProgress, task.agent_id);
   broadcastToTopics(['office', 'all'], {
@@ -809,7 +817,7 @@ function upsertOfficeReport(task: TaskRow, options?: { forceApproved?: boolean; 
   const lane = task.lane_id ? selectLaneById.get(task.lane_id) : null;
   const existing = selectLatestOfficeReportByTaskId.get(task.id);
   const now = Date.now();
-  const autoApproved = task.agent_id === 'mildred' || Boolean(options?.forceApproved);
+  const autoApproved = task.agent_id === 'main' || Boolean(options?.forceApproved);
   const reviewStatus = autoApproved ? 'approved' : 'pending';
   const reviewedBy = autoApproved ? (options?.reviewedBy ?? 'Mildred') : null;
   const approvedBy = autoApproved ? (options?.approvedBy ?? 'Mildred') : null;
@@ -1960,7 +1968,14 @@ app.get('/api/dashboard/stats', (_req, res) => {
 const server = createServer(app);
 
 app.get('/api/office/agents', (_req, res) => {
-  const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
+  const now = Date.now();
+  const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all().map((agent) => {
+    const live = liveAgentActivity.get(agent.id);
+    if (live && now - live.lastSeen < LIVE_AGENT_ACTIVITY_TTL_MS) {
+      return { ...agent, state: live.officeState, current_task: live.taskLabel };
+    }
+    return agent;
+  });
   res.json({ agents });
 });
 
@@ -2183,6 +2198,8 @@ function initGateway() {
       : parsed.summary.length > 60
         ? parsed.summary.slice(0, 60) + '...'
         : parsed.summary || null;
+
+    liveAgentActivity.set(parsed.agentId, { officeState, taskLabel, lastSeen: now });
 
     if (officeAgent) {
       db.prepare('UPDATE office_agents SET state = ?, current_task = ? WHERE id = ?')

@@ -209,3 +209,13 @@ This confirms the project was considered active and worth preserving alongside o
 - Added local backend route `POST /api/selftape/diagnostics/access-token` to store a PAT in macOS Keychain without committing it to git or exposing it to the frontend.
 - Diagnostics queries still return only redacted event summaries to the browser.
 - Verification: `npm run build` passed.
+
+## Mission Control hub and avatar-truth pass — Apr 27, 2026
+- Started the next Mission Control phase beyond Self-e-Tape: make the hub easier to understand and ensure the visual office represents real activity honestly.
+- Office/avatar truth changes:
+  - task status `ready` now maps to `reserved`, not `working`, so assigned-but-not-started work no longer falsely shows an agent actively working.
+  - live gateway events temporarily override task-derived state for 45 seconds, so real thinking/tool/speaking activity is what lights up the desk.
+  - frontend also expires stale live working/blocked states after 45 seconds without fresh activity.
+  - fixed office-report auto-approval identity from stale `mildred` agent id to real `main` id.
+- Added plain copy in the Office page explaining avatar truth: live gateway activity lights desks; assigned-but-not-started work is reserved.
+- Verification: `npm run build` passed.

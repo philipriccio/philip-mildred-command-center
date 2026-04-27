@@ -11,6 +11,8 @@ type AgentStateSnapshot = {
   lastSeen: number;
 };
 
+const LIVE_STATE_TTL_MS = 45_000;
+
 interface OfficeAgent {
   id: string;
   name: string;
@@ -197,6 +199,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         }
 
         if (data.type === 'agent.state' && typeof data.agentId === 'string') {
+          const seenAt = Date.now();
           setAgents((prev) => prev.map((agent) => agent.id === data.agentId ? {
             ...agent,
             state: typeof data.state === 'string' ? data.state : agent.state,
@@ -206,7 +209,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
           agentStateHistory.current.set(data.agentId, {
             state: typeof data.state === 'string' ? data.state : 'idle',
             current_task: typeof data.task === 'string' ? data.task : null,
-            lastSeen: Date.now(),
+            lastSeen: seenAt,
           });
           return;
         }
@@ -238,6 +241,23 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
 
     return () => ws.close();
   }, [apiBase, selectedDetail?.id, wsUrl]);
+
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const now = Date.now();
+      setAgents((prev) => prev.map((agent) => {
+        const snapshot = agentStateHistory.current.get(agent.id);
+        if (!snapshot) return agent;
+        const stateLooksLive = ['working', 'blocked'].includes(agent.state);
+        if (stateLooksLive && now - snapshot.lastSeen > LIVE_STATE_TTL_MS) {
+          return { ...agent, state: 'idle', current_task: null, task_progress: 0 };
+        }
+        return agent;
+      }));
+    }, 10_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const activeCount = agents.filter((a) => a.state === 'working').length;
   const blockedCount = agents.filter((a) => a.state === 'blocked').length;
@@ -280,6 +300,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         <div>
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Mission Control office</p>
           <h3 className="text-lg font-semibold text-slate-100">Default home view</h3>
+          <p className="mt-1 text-xs text-slate-500">Avatar truth: desks light up from live gateway activity; assigned-but-not-started work is reserved, not working.</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="rounded-xl border border-slate-800 bg-slate-950 px-3 py-2 text-sm text-slate-300">
