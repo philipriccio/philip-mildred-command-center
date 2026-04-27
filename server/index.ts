@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -1617,11 +1617,14 @@ function getSelfTapeSupabaseConfig() {
     ?? readOptionalText(path.join(selfTapePath, 'supabase/.temp/project-ref'));
   const anonKey = process.env.SELFTAPE_SUPABASE_ANON_KEY ?? process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
   const serviceRoleKey = process.env.SELFTAPE_SUPABASE_SERVICE_ROLE_KEY ?? process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const accessToken = process.env.SELFTAPE_SUPABASE_ACCESS_TOKEN
+    ?? process.env.SUPABASE_ACCESS_TOKEN
+    ?? readKeychainSecret('command-center/selftape/supabase-access-token');
   const url = process.env.SELFTAPE_SUPABASE_URL
     ?? process.env.EXPO_PUBLIC_SUPABASE_URL
     ?? (projectRef ? `https://${projectRef}.supabase.co` : null);
-  const authKey = serviceRoleKey ?? anonKey ?? null;
-  return { selfTapePath, projectRef, url, authKey, usingServiceRole: Boolean(serviceRoleKey) };
+  const directAuthKey = serviceRoleKey ?? anonKey ?? null;
+  return { selfTapePath, projectRef, url, directAuthKey, accessToken, usingServiceRole: Boolean(serviceRoleKey) };
 }
 
 function readOptionalText(filePath: string) {
@@ -1629,6 +1632,65 @@ function readOptionalText(filePath: string) {
     return fs.readFileSync(filePath, 'utf8').trim() || null;
   } catch {
     return null;
+  }
+}
+
+function readKeychainSecret(account: string) {
+  if (process.platform !== 'darwin') return null;
+  const result = spawnSync('security', ['find-generic-password', '-s', 'openclaw', '-a', account, '-w'], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  if (result.status !== 0) return null;
+  return result.stdout.trim() || null;
+}
+
+function writeKeychainSecret(account: string, secret: string) {
+  if (process.platform !== 'darwin') throw new Error('Keychain storage is only available on macOS');
+  const result = spawnSync('security', ['add-generic-password', '-U', '-s', 'openclaw', '-a', account, '-w', secret], {
+    encoding: 'utf8',
+    timeout: 5_000,
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr.trim() || 'Failed to write secret to macOS Keychain');
+  }
+}
+
+function maskSecret(secret: string | null) {
+  if (!secret) return null;
+  if (secret.length <= 8) return '••••';
+  return `${secret.slice(0, 4)}…${secret.slice(-4)}`;
+}
+
+async function resolveSelfTapeRestAuthKey(config: ReturnType<typeof getSelfTapeSupabaseConfig>) {
+  if (config.directAuthKey) {
+    return { authKey: config.directAuthKey, source: config.usingServiceRole ? 'service-role-env' : 'anon-env', note: null as string | null };
+  }
+  if (!config.projectRef || !config.accessToken) {
+    return { authKey: null, source: 'unconfigured', note: null as string | null };
+  }
+
+  try {
+    const endpoint = `https://api.supabase.com/v1/projects/${config.projectRef}/api-keys`;
+    const response = await fetch(endpoint, {
+      headers: { Authorization: `Bearer ${config.accessToken}` },
+    });
+    if (!response.ok) {
+      const body = await response.text();
+      return { authKey: null, source: 'management-token', note: `Supabase Management API key lookup failed: ${response.status} ${body.slice(0, 160)}` };
+    }
+    const keys = await response.json() as Array<{ name?: string; api_key?: string; key?: string }>;
+    const serviceKey = keys.find((key) => /service_role|service role|secret/i.test(key.name ?? ''));
+    const anonKey = keys.find((key) => /anon|publishable/i.test(key.name ?? ''));
+    const selected = serviceKey ?? anonKey;
+    const apiKey = selected?.api_key ?? selected?.key ?? null;
+    return {
+      authKey: apiKey,
+      source: serviceKey ? 'management-token/service-role' : 'management-token/anon',
+      note: apiKey ? null : 'Supabase Management API returned no usable REST key.',
+    };
+  } catch (error) {
+    return { authKey: null, source: 'management-token', note: error instanceof Error ? error.message : String(error) };
   }
 }
 
@@ -1686,14 +1748,15 @@ function summarizeDiagnosticEvents(events: DiagnosticEventRow[]) {
 async function fetchDiagnosticEvents(limit: number): Promise<DiagnosticEventsResponse> {
   const checkedAt = Date.now();
   const config = getSelfTapeSupabaseConfig();
-  if (!config.url || !config.authKey) {
+  const resolvedAuth = await resolveSelfTapeRestAuthKey(config);
+  if (!config.url || !resolvedAuth.authKey) {
     return {
       configured: false,
       source: config.url ?? 'unconfigured',
       checkedAt,
       events: [],
       summary: emptyDiagnosticSummary(),
-      error: 'Set SELFTAPE_SUPABASE_SERVICE_ROLE_KEY or SELFTAPE_SUPABASE_ANON_KEY on the Command Center server to read diagnostic events.',
+      error: resolvedAuth.note ?? 'Set SELFTAPE_SUPABASE_SERVICE_ROLE_KEY, SELFTAPE_SUPABASE_ANON_KEY, or a server-only SELFTAPE_SUPABASE_ACCESS_TOKEN to read diagnostic events.',
     };
   }
 
@@ -1705,8 +1768,8 @@ async function fetchDiagnosticEvents(limit: number): Promise<DiagnosticEventsRes
   try {
     const response = await fetch(endpoint, {
       headers: {
-        apikey: config.authKey,
-        Authorization: `Bearer ${config.authKey}`,
+        apikey: resolvedAuth.authKey,
+        Authorization: `Bearer ${resolvedAuth.authKey}`,
       },
     });
     if (!response.ok) {
@@ -1763,6 +1826,20 @@ app.get('/api/selftape/diagnostics', async (req, res) => {
   const limit = Number.isFinite(limitParam) ? Math.min(Math.max(Math.round(limitParam), 1), 250) : 80;
   const diagnostics = await fetchDiagnosticEvents(limit);
   res.json(diagnostics);
+});
+
+app.post('/api/selftape/diagnostics/access-token', (req, res) => {
+  const { token } = req.body as { token?: string };
+  if (!token || !token.startsWith('sbp_')) {
+    res.status(400).json({ ok: false, error: 'Expected a Supabase personal access token.' });
+    return;
+  }
+  try {
+    writeKeychainSecret('command-center/selftape/supabase-access-token', token);
+    res.json({ ok: true, stored: 'macos-keychain', token: maskSecret(token) });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error instanceof Error ? error.message : String(error) });
+  }
 });
 
 app.get('/api/dashboard/stats', (_req, res) => {

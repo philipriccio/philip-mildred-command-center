@@ -202,3 +202,10 @@ This confirms the project was considered active and worth preserving alongside o
 - If Supabase read credentials are not configured, the panel fails closed with setup guidance instead of exposing or guessing data.
 - Fixed the Expo status parser to avoid treating historical incident text as an active EAS outage when the current status says all systems operational.
 - Verification: `npm run build` passed.
+
+### SelfTape Supabase PAT support — Apr 27
+- Added server-only support for a Supabase personal access token for SelfTape diagnostics.
+- Command Center can now resolve a REST API key from Supabase Management API when `SELFTAPE_SUPABASE_ACCESS_TOKEN` / `SUPABASE_ACCESS_TOKEN` is set or when the token is stored in macOS Keychain under `openclaw` / `command-center/selftape/supabase-access-token`.
+- Added local backend route `POST /api/selftape/diagnostics/access-token` to store a PAT in macOS Keychain without committing it to git or exposing it to the frontend.
+- Diagnostics queries still return only redacted event summaries to the browser.
+- Verification: `npm run build` passed.
