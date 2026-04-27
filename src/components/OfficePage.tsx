@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 // officeSceneConfig no longer used — 2D canvas has its own desk layout
 import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
 import { AgentDetailDrawer } from './AgentDetailDrawer';
@@ -83,43 +83,6 @@ const FALLBACK_AGENTS: OfficeAgent[] = [
   { id: 'gpt-mini', name: 'GPT-mini', position_x: 0, position_y: 0, state: 'idle', current_task: null, task_progress: 0, color: '#27AE60', office_enabled: 1 },
 ];
 
-const FALLBACK_TASKS: Task[] = [
-  {
-    id: 'fallback-mildred-blocked',
-    title: 'Review pending launch decision',
-    description: 'Waiting on external approval before Mildred can continue execution.',
-    status: 'in_progress',
-    agent_id: 'mildred',
-    lane_id: null,
-    blocker_reason: 'Awaiting external approval.',
-    request_summary: 'Blocked office-state verification task.',
-    completion_summary: null,
-    progress_summary: 'Context gathered and recommendation drafted; waiting on go-ahead.',
-    next_step: 'Resume execution as soon as approval lands.',
-    model_used: 'openai-codex/gpt-5.4',
-    updated_at: Date.now(),
-    agent_name: 'Mildred',
-    lane_name: null,
-  },
-  {
-    id: 'fallback-dev-active',
-    title: 'Implement office master scene anchors',
-    description: 'Build master-scene background, anchors, states, and desk interactions.',
-    status: 'in_progress',
-    agent_id: 'dev',
-    lane_id: null,
-    blocker_reason: null,
-    request_summary: 'Integrate the approved master-scene image and live desk states.',
-    completion_summary: null,
-    progress_summary: 'Scene config, reserved desk state, and interaction zones are in implementation.',
-    next_step: 'Verify screenshots and clean up before movement phase.',
-    model_used: 'openai-codex/gpt-5.4',
-    updated_at: Date.now() - 1000,
-    agent_name: 'Dev',
-    lane_name: null,
-  },
-];
-
 function formatRelativeTime(timestamp: number, now: number) {
   const diff = Math.max(0, now - timestamp);
   const minute = 60_000;
@@ -151,7 +114,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
   const [reports, setReports] = useState<OfficeReport[]>([]);
   const [pendingReports, setPendingReports] = useState<OfficeReport[]>([]);
   const [agents, setAgents] = useState<OfficeAgent[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
+
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [showReports, setShowReports] = useState(false);
@@ -171,11 +134,10 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
 
   const fetchAll = async () => {
     try {
-      const [agentsRes, reportsRes, pendingRes, tasksRes, activityRes] = await Promise.all([
+      const [agentsRes, reportsRes, pendingRes, activityRes] = await Promise.all([
         fetch(`${apiBase}/api/office/agents`),
         fetch(`${apiBase}/api/office/reports`),
         fetch(`${apiBase}/api/office/reports?includePending=1`),
-        fetch(`${apiBase}/api/tasks`),
         fetch(`${apiBase}/api/activity/recent`),
       ]);
 
@@ -196,7 +158,6 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       setAgents(newAgents);
       setReports(approvedPayload.reports || []);
       setPendingReports((allPayload.reports || []).filter((report) => report.review_status !== 'approved'));
-      setTasks(await tasksRes.json());
       setActivity((activityPayload.entries || []).slice(-50));
       setUsingFallbackData(false);
     } catch (error) {
@@ -204,7 +165,6 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       setAgents(FALLBACK_AGENTS);
       setReports([]);
       setPendingReports([]);
-      setTasks(FALLBACK_TASKS);
       setActivity([]);
       setUsingFallbackData(true);
     }
@@ -278,18 +238,6 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
 
     return () => ws.close();
   }, [apiBase, selectedDetail?.id, wsUrl]);
-
-  const taskByAgent = useMemo(() => {
-    const map = new Map<string, Task>();
-    for (const task of tasks) {
-      if (!task.agent_id) continue;
-      const current = map.get(task.agent_id);
-      if (!current || task.updated_at > current.updated_at) {
-        map.set(task.agent_id, task);
-      }
-    }
-    return map;
-  }, [tasks]);
 
   const activeCount = agents.filter((a) => a.state === 'working').length;
   const blockedCount = agents.filter((a) => a.state === 'blocked').length;

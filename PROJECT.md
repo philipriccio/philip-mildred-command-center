@@ -157,3 +157,12 @@ This confirms the project was considered active and worth preserving alongside o
 3. Make clicking an agent reveal useful plain-English task detail including model used.
 4. Add Mildred review/approval gate before reports appear as final in Reports Tray.
 5. Strengthen Reports Tray as the archive of trusted completed work.
+
+## Self-e-Tape operating-system dashboard foundation — Apr 27, 2026
+- Added a first Mission Control Ops view focused on Self-e-Tape as a standing strategic workstream, not just a task list.
+- North star: become the best and most-used self-tape app by winning actor trust first, then awareness/adoption.
+- Dashboard foundation now tracks actor journey health, authority boundaries, proactive loops, risks, and opportunities.
+- Created recurring proactive loops outside the app:
+  - daily Self-e-Tape trust scan at 8 AM Toronto
+  - weekly market-leadership review Monday 9 AM Toronto
+- Verification: `npm run build` passed after the Ops view changes.

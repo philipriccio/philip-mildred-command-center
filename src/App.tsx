@@ -9,6 +9,7 @@ import { OfficePage } from './components/OfficePage';
 import { ProjectsPage } from './components/ProjectsPage';
 import { QuickCommand } from './components/QuickCommand';
 import { SessionsPanel } from './components/SessionsPanel';
+import { SelfTapeOpsPage } from './components/SelfTapeOpsPage';
 import { SiteHealthPanel } from './components/SiteHealthPanel';
 import { TaskComposer } from './components/TaskComposer';
 import { TaskDetailDrawer } from './components/TaskDetailDrawer';
@@ -348,7 +349,7 @@ function App() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex rounded-xl border border-slate-800 bg-slate-900 p-1 text-sm">
-              {(['office', 'dashboard', 'board', 'projects'] as ViewMode[]).map((mode) => (
+              {(['office', 'dashboard', 'ops', 'board', 'projects'] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -520,6 +521,8 @@ function App() {
             </section>
           </div>
         )}
+
+        {viewMode === 'ops' && <SelfTapeOpsPage />}
 
         {viewMode === 'board' && (
           <div className="space-y-6">

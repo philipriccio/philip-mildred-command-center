@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { EmptyState, Panel } from './ui';
-import type { Agent, CronJob, ProjectDetail, ProjectSummary, WorkItem, WorkItemStatus } from '../types';
+import type { CronJob, ProjectDetail, ProjectSummary, WorkItem, WorkItemStatus } from '../types';
 
 const WORK_ITEM_COLUMNS: Array<{ id: WorkItemStatus; label: string }> = [
   { id: 'todo', label: 'To do' },

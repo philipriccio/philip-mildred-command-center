@@ -1,6 +1,6 @@
 import type { StatusId } from './components/ui';
 
-export type ViewMode = 'office' | 'dashboard' | 'board' | 'projects';
+export type ViewMode = 'office' | 'dashboard' | 'board' | 'projects' | 'ops';
 
 export interface Agent {
   id: string;
@@ -124,6 +124,45 @@ export interface TaskCostSummary {
     estimated: number;
     actual: number;
   };
+}
+
+export type OpsStatus = 'green' | 'yellow' | 'red';
+
+export interface SelfTapeOpsData {
+  northStar: {
+    goal: string;
+    strategy: string;
+    phase: string;
+    currentRecommendation: string;
+  };
+  authority: {
+    green: string[];
+    yellow: string[];
+    red: string[];
+  };
+  journey: Array<{
+    step: string;
+    status: OpsStatus;
+    evidence: string;
+    nextAction: string;
+  }>;
+  proactiveLoops: Array<{
+    cadence: string;
+    name: string;
+    output: string;
+    trigger: string;
+  }>;
+  risks: Array<{
+    title: string;
+    severity: 'critical' | 'high' | 'medium' | 'low';
+    owner: string;
+    status: string;
+  }>;
+  opportunities: Array<{
+    title: string;
+    impact: string;
+    nextAction: string;
+  }>;
 }
 
 export interface TaskDraft {
