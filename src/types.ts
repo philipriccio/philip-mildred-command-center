@@ -128,6 +128,26 @@ export interface TaskCostSummary {
 
 export type OpsStatus = 'green' | 'yellow' | 'red';
 
+export interface SelfTapeLiveStatus {
+  branch: string | null;
+  head: string | null;
+  dirty: boolean;
+  buildNumber: string | null;
+  easIncident: {
+    active: boolean;
+    title: string | null;
+    summary: string | null;
+    checkedAt: number;
+  };
+  buildAttempts: Array<{
+    build: string;
+    status: string;
+    note: string;
+  }>;
+  recommendedAction: string;
+  sourcePath: string;
+}
+
 export interface SelfTapeOpsData {
   northStar: {
     goal: string;

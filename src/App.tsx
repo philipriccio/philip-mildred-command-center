@@ -522,7 +522,7 @@ function App() {
           </div>
         )}
 
-        {viewMode === 'ops' && <SelfTapeOpsPage />}
+        {viewMode === 'ops' && <SelfTapeOpsPage apiBase={API_BASE} />}
 
         {viewMode === 'board' && (
           <div className="space-y-6">

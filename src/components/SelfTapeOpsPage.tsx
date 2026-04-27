@@ -1,5 +1,6 @@
+import { useEffect, useState } from 'react';
 import { selfTapeOpsData } from '../selfTapeOperatingSystem';
-import type { OpsStatus } from '../types';
+import type { OpsStatus, SelfTapeLiveStatus } from '../types';
 import { Panel } from './ui';
 
 const statusStyles: Record<OpsStatus, string> = {
@@ -34,8 +35,27 @@ function AuthorityColumn({ title, tone, items }: { title: string; tone: string; 
   );
 }
 
-export function SelfTapeOpsPage() {
+export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
   const data = selfTapeOpsData;
+  const [liveStatus, setLiveStatus] = useState<SelfTapeLiveStatus | null>(null);
+  const [liveError, setLiveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${apiBase}/api/selftape/status`)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Status request failed: ${response.status}`);
+        return response.json() as Promise<SelfTapeLiveStatus>;
+      })
+      .then((status) => {
+        if (!cancelled) setLiveStatus(status);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setLiveError(error instanceof Error ? error.message : 'Status unavailable');
+      });
+    return () => { cancelled = true; };
+  }, [apiBase]);
+
   const redCount = data.journey.filter((item) => item.status === 'red').length;
   const yellowCount = data.journey.filter((item) => item.status === 'yellow').length;
   const greenCount = data.journey.filter((item) => item.status === 'green').length;
@@ -74,6 +94,49 @@ export function SelfTapeOpsPage() {
           <p className="mt-2 text-3xl font-semibold text-emerald-100">{greenCount}</p>
         </div>
       </section>
+
+      <Panel title="Live build edge" subtitle="Current repo/build state from SelfTapeApp, plus the next recommended action.">
+        {liveStatus ? (
+          <div className="grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Branch</p>
+                <p className="mt-2 font-semibold text-slate-100">{liveStatus.branch ?? 'unknown'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Head / build</p>
+                <p className="mt-2 font-semibold text-slate-100">{liveStatus.head ?? 'unknown'} · {liveStatus.buildNumber ?? '—'}</p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${liveStatus.dirty ? 'border-amber-400/30 bg-amber-500/10' : 'border-emerald-400/30 bg-emerald-500/10'}`}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Working tree</p>
+                <p className="mt-2 font-semibold text-slate-100">{liveStatus.dirty ? 'Dirty — clean before build' : 'Clean'}</p>
+              </div>
+              <div className={`rounded-2xl border p-4 ${liveStatus.easIncident.active ? 'border-rose-400/30 bg-rose-500/10' : 'border-emerald-400/30 bg-emerald-500/10'}`}>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Expo/EAS</p>
+                <p className="mt-2 font-semibold text-slate-100">{liveStatus.easIncident.active ? 'Incident active' : 'No active iOS incident detected'}</p>
+                {liveStatus.easIncident.summary && <p className="mt-1 text-xs text-slate-400">{liveStatus.easIncident.summary}</p>}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-blue-400/30 bg-blue-500/10 p-4">
+              <p className="text-xs uppercase tracking-[0.24em] text-blue-200">Recommended next action</p>
+              <p className="mt-2 text-sm leading-6 text-slate-100">{liveStatus.recommendedAction}</p>
+              {liveStatus.buildAttempts.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {liveStatus.buildAttempts.map((attempt) => (
+                    <div key={`${attempt.build}-${attempt.status}`} className="rounded-xl border border-slate-700/70 bg-slate-950/50 px-3 py-2 text-xs text-slate-300">
+                      <span className="font-semibold text-slate-100">Build {attempt.build}</span> — {attempt.status}{attempt.note ? ` · ${attempt.note}` : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-sm text-slate-400">
+            {liveError ? `Live status unavailable: ${liveError}` : 'Loading live Self-e-Tape status…'}
+          </div>
+        )}
+      </Panel>
 
       <Panel title="Actor journey health" subtitle="The app must win every step from sides to submission-ready tape.">
         <div className="grid gap-3">

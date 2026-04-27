@@ -3,6 +3,7 @@ import helmet from 'helmet';
 import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
+import { execFileSync } from 'child_process';
 import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -1512,6 +1513,69 @@ app.post('/api/weekly-summaries/generate', (req, res) => {
   const saved = db.prepare('SELECT * FROM weekly_summaries WHERE id = ?').get(id);
   broadcastUpdate({ type: 'weekly_summary_generated', data: saved });
   res.status(201).json(saved);
+});
+
+function safeExec(command: string, args: string[], cwd: string) {
+  try {
+    return execFileSync(command, args, { cwd, encoding: 'utf8', timeout: 10_000 }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readBuildNumber(appJsonPath: string) {
+  try {
+    const appJson = JSON.parse(fs.readFileSync(appJsonPath, 'utf8')) as { expo?: { ios?: { buildNumber?: string } } };
+    return appJson.expo?.ios?.buildNumber ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readBuildAttempts(buildLogPath: string) {
+  try {
+    const text = fs.readFileSync(buildLogPath, 'utf8');
+    const matches = Array.from(text.matchAll(/## Build (\d+) — ([^\n]+)\n([\s\S]*?)(?=\n## Build |\n### Expo status|$)/g));
+    return matches.slice(-4).map((match) => ({
+      build: match[1],
+      status: match[2].trim(),
+      note: (match[3].match(/- Status: ([^\n]+)/)?.[1] ?? match[3].match(/- EAS error: ([^\n]+)/)?.[1] ?? '').trim(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+async function readExpoIncident() {
+  const checkedAt = Date.now();
+  try {
+    const response = await fetch('https://status.expo.dev/');
+    const text = await response.text();
+    const active = /iOS Builds fail to start|Mac workers fail to start|EAS Build.*degraded/i.test(text);
+    const title = text.match(/iOS Builds fail to start/i)?.[0] ?? null;
+    const summary = text.match(/Mac workers fail to start[^<\n]*/i)?.[0] ?? null;
+    return { active, title, summary, checkedAt };
+  } catch {
+    return { active: false, title: null, summary: 'Expo status unavailable', checkedAt };
+  }
+}
+
+app.get('/api/selftape/status', async (_req, res) => {
+  const sourcePath = '/Users/mildred/.openclaw/workspace/projects/SelfTapeApp';
+  const branch = safeExec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], sourcePath);
+  const head = safeExec('git', ['rev-parse', '--short', 'HEAD'], sourcePath);
+  const status = safeExec('git', ['status', '--short'], sourcePath);
+  const dirty = Boolean(status?.trim());
+  const buildNumber = readBuildNumber(path.join(sourcePath, 'app.json'));
+  const buildAttempts = readBuildAttempts(path.join(sourcePath, 'BUILD-LOG.md'));
+  const easIncident = await readExpoIncident();
+  const recommendedAction = easIncident.active
+    ? 'Wait for Expo/EAS iOS workers to recover, then attempt one monitored build retry.'
+    : dirty
+      ? 'Clean or commit the SelfTape working tree before the next build retry.'
+      : 'Run one monitored production iOS build retry, then submit to TestFlight only if it completes cleanly.';
+
+  res.json({ branch, head, dirty, buildNumber, easIncident, buildAttempts, recommendedAction, sourcePath });
 });
 
 app.get('/api/dashboard/stats', (_req, res) => {

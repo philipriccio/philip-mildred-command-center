@@ -166,3 +166,15 @@ This confirms the project was considered active and worth preserving alongside o
   - daily Self-e-Tape trust scan at 8 AM Toronto
   - weekly market-leadership review Monday 9 AM Toronto
 - Verification: `npm run build` passed after the Ops view changes.
+
+## Self-e-Tape Ops live status — Apr 27, 2026
+- Added `/api/selftape/status` to Mission Control API.
+- Ops tab now pulls live SelfTape repo/build state instead of relying only on static operating-system copy:
+  - branch/head
+  - dirty tree flag
+  - iOS build number
+  - recent build attempts parsed from `BUILD-LOG.md`
+  - Expo/EAS iOS incident signal from Expo Status
+  - recommended next action
+- Smoke-tested endpoint locally: returned SelfTape branch `feature/audit-fixes-submission-reader-mode`, head `03c3da7`, clean tree, build `277`, and active Expo incident matching Builds 276/277.
+- Verification: `npm run build` passed.
