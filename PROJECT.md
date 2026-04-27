@@ -219,3 +219,13 @@ This confirms the project was considered active and worth preserving alongside o
   - fixed office-report auto-approval identity from stale `mildred` agent id to real `main` id.
 - Added plain copy in the Office page explaining avatar truth: live gateway activity lights desks; assigned-but-not-started work is reserved.
 - Verification: `npm run build` passed.
+
+## Mission Control command hub — Apr 27, 2026
+- Added `hub` as the default Mission Control view so Philip lands on a plain-English command desk rather than raw widgets.
+- New `CommandHubPage` groups work into:
+  - Needs Philip: approvals, device tests, decisions, external actions.
+  - Mildred Moving: active/prepared work packets.
+  - Blocked / Risk: constraints and why progress is stopped.
+  - Project Cockpits: fast paths into Self-e-Tape Ops, Projects, Visual Office, and Systems Dashboard.
+- Design intent: Mission Control should answer “what needs me, what is Mildred handling, what is blocked, what changed?” before showing operational detail.
+- Verification: `npm run build` passed.

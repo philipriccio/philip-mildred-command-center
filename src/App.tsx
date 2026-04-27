@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { ActivityTimeline } from './components/ActivityTimeline';
 import { AgentCard } from './components/AgentCard';
+import { CommandHubPage } from './components/CommandHubPage';
 import { CostTracker } from './components/CostTracker';
 import { CronPanel } from './components/CronPanel';
 import { NotificationToast, type NotificationToastItem } from './components/NotificationToast';
@@ -49,7 +50,7 @@ function App() {
   const [status, setStatus] = useState<StatusResponse>({ gateway_connected: 0, last_update: 0 });
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
   const [costSummary, setCostSummary] = useState<TaskCostSummary>({ totals: { tokens: 0, estimated: 0, actual: 0 } });
-  const [viewMode, setViewMode] = useState<ViewMode>('office');
+  const [viewMode, setViewMode] = useState<ViewMode>('hub');
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [selectedLane, setSelectedLane] = useState('all');
   const [connected, setConnected] = useState(false);
@@ -349,7 +350,7 @@ function App() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex rounded-xl border border-slate-800 bg-slate-900 p-1 text-sm">
-              {(['office', 'dashboard', 'ops', 'board', 'projects'] as ViewMode[]).map((mode) => (
+              {(['hub', 'office', 'ops', 'dashboard', 'projects', 'board'] as ViewMode[]).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setViewMode(mode)}
@@ -384,6 +385,14 @@ function App() {
             <AlertCard tone="red" title={`${overdueTasks.length} overdue tasks`} body="These tasks are slipping beyond their promised timeline." />
             <AlertCard tone="amber" title={`${blockedTasks.length} blocked tasks`} body="There are active blockers that need Mildred’s attention or user input." />
           </section>
+        )}
+
+        {viewMode === 'hub' && (
+          <CommandHubPage
+            tasks={tasks}
+            onOpenTask={(taskId) => void openTaskDetail(taskId)}
+            onOpenView={setViewMode}
+          />
         )}
 
         {viewMode === 'dashboard' && dashboardStats && (

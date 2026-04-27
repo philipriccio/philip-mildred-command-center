@@ -1,6 +1,6 @@
 import type { StatusId } from './components/ui';
 
-export type ViewMode = 'office' | 'dashboard' | 'board' | 'projects' | 'ops';
+export type ViewMode = 'hub' | 'office' | 'dashboard' | 'board' | 'projects' | 'ops';
 
 export interface Agent {
   id: string;
