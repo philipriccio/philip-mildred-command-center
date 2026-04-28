@@ -394,3 +394,10 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Panel now shows category, goal, time committed, and progress/outcome placeholders for writing, reading, workout, auditions/acting, networking, and TV/industry watching.
 - Next step remains wiring the panel to `memory/protected-work-log.md` or a backend store.
 - Verification: `npm run build` passed.
+
+## Protected-work panel live data wiring — Apr 27, 2026
+- Wired the Creative / Deep Work Health panel to real data from `/Users/mildred/.openclaw/workspace/memory/protected-work-log.md`.
+- Added backend endpoint `/api/protected-work` that parses the rolling weekly protected-work log into category, time committed, progress/outcome, and notes.
+- Command Hub now fetches protected-work data and passes it into the panel instead of static placeholders.
+- Smoke verified endpoint response locally with week `2026-04-27` and all six protected categories.
+- Verification: `npm run build` passed.

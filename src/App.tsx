@@ -32,6 +32,7 @@ import {
   type DashboardStats,
   EMPTY_DRAFT,
   type Lane,
+  type ProtectedWorkResponse,
   type StatusResponse,
   type Task,
   type TaskCostSummary,
@@ -49,6 +50,7 @@ function App() {
   const [lanes, setLanes] = useState<Lane[]>([]);
   const [status, setStatus] = useState<StatusResponse>({ gateway_connected: 0, last_update: 0 });
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
+  const [protectedWork, setProtectedWork] = useState<ProtectedWorkResponse | null>(null);
   const [costSummary, setCostSummary] = useState<TaskCostSummary>({ totals: { tokens: 0, estimated: 0, actual: 0 } });
   const [viewMode, setViewMode] = useState<ViewMode>('hub');
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -86,12 +88,13 @@ function App() {
   }, []);
 
   const fetchAll = useCallback(async () => {
-    const [agentsRes, tasksRes, statusRes, lanesRes, dashboardRes, costRes] = await Promise.all([
+    const [agentsRes, tasksRes, statusRes, lanesRes, dashboardRes, protectedWorkRes, costRes] = await Promise.all([
       fetch(`${API_BASE}/api/agents`),
       fetch(`${API_BASE}/api/tasks`),
       fetch(`${API_BASE}/api/status`),
       fetch(`${API_BASE}/api/lanes`),
       fetch(`${API_BASE}/api/dashboard/stats`),
+      fetch(`${API_BASE}/api/protected-work`),
       fetch(`${API_BASE}/api/task-costs/summary`),
     ]);
 
@@ -100,6 +103,7 @@ function App() {
     setStatus(await statusRes.json());
     setLanes(await lanesRes.json());
     setDashboardStats(await dashboardRes.json());
+    setProtectedWork(await protectedWorkRes.json());
     setCostSummary(await costRes.json());
   }, []);
 
@@ -417,6 +421,7 @@ function App() {
         {viewMode === 'hub' && (
           <CommandHubPage
             tasks={tasks}
+            protectedWork={protectedWork}
             onOpenTask={(taskId) => void openTaskDetail(taskId)}
             onOpenView={setViewMode}
             onApproveTask={(taskId) => void quickQueueAction(taskId, 'approve')}

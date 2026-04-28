@@ -87,6 +87,44 @@ interface DiagnosticEventsResponse {
   error?: string;
 }
 
+
+interface ProtectedWorkCategoryRow {
+  category: string;
+  timeCommitted: string;
+  progress: string;
+  notes: string;
+}
+
+function parseProtectedWorkLog() {
+  const logPath = '/Users/mildred/.openclaw/workspace/memory/protected-work-log.md';
+  const fallback = {
+    week: 'unknown',
+    updatedAt: Date.now(),
+    source: logPath,
+    categories: [] as ProtectedWorkCategoryRow[],
+  };
+  if (!fs.existsSync(logPath)) return fallback;
+  const content = fs.readFileSync(logPath, 'utf8');
+  const weekMatch = content.match(/^##\s+Week of\s+(.+)$/m);
+  const rows = content
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('|') && !line.includes('---') && !line.startsWith('| Category'))
+    .map((line) => line.split('|').slice(1, -1).map((cell) => cell.trim()))
+    .filter((cells) => cells.length >= 4)
+    .map(([category, timeCommitted, progress, notes]) => ({
+      category,
+      timeCommitted,
+      progress,
+      notes,
+    }));
+  return {
+    ...fallback,
+    week: weekMatch?.[1]?.trim() ?? 'unknown',
+    categories: rows,
+  };
+}
+
 interface AgentRow {
   id: string;
   name: string;
@@ -1861,6 +1899,16 @@ async function fetchDiagnosticEvents(limit: number): Promise<DiagnosticEventsRes
     };
   }
 }
+
+
+app.get('/api/protected-work', (_req, res) => {
+  try {
+    res.json(parseProtectedWorkLog());
+  } catch (error) {
+    console.error('Failed to parse protected work log', error);
+    res.status(500).json({ error: 'Failed to parse protected work log' });
+  }
+});
 
 app.get('/api/selftape/status', async (_req, res) => {
   const sourcePath = '/Users/mildred/.openclaw/workspace/projects/SelfTapeApp';

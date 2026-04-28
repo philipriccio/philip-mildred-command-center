@@ -361,3 +361,17 @@ export interface ProjectDetail {
   cron_job_ids: string[];
   cron_jobs: CronJob[];
 }
+
+export interface ProtectedWorkCategory {
+  category: string;
+  timeCommitted: string;
+  progress: string;
+  notes: string;
+}
+
+export interface ProtectedWorkResponse {
+  week: string;
+  updatedAt: number;
+  source: string;
+  categories: ProtectedWorkCategory[];
+}

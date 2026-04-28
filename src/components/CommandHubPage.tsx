@@ -1,9 +1,10 @@
 import { DeepWorkHealthPanel } from './DeepWorkHealthPanel';
 import { Panel, StatusBadge, type StatusId } from './ui';
-import type { Task } from '../types';
+import type { ProtectedWorkResponse, Task } from '../types';
 
 interface CommandHubPageProps {
   tasks: Task[];
+  protectedWork: ProtectedWorkResponse | null;
   onOpenTask: (taskId: string) => void;
   onOpenView: (view: 'office' | 'dashboard' | 'ops' | 'board' | 'projects') => void;
   onApproveTask: (taskId: string) => void;
@@ -59,7 +60,7 @@ function EmptyPanel({ message }: { message: string }) {
   return <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/50 p-5 text-sm text-slate-500">{message}</div>;
 }
 
-export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, onHoldTask, onRejectTask }: CommandHubPageProps) {
+export function CommandHubPage({ tasks, protectedWork, onOpenTask, onOpenView, onApproveTask, onHoldTask, onRejectTask }: CommandHubPageProps) {
   const needsPhilip = tasks.filter((task) => task.status === 'verification' || /philip|approval|approve|decision|test/i.test(`${task.next_step ?? ''} ${task.request_summary ?? ''} ${task.blocker_reason ?? ''}`));
   const waitingOnPhilip = tasks.filter((task) => /philip/i.test(`${task.next_step ?? ''} ${task.request_summary ?? ''} ${task.blocker_reason ?? ''} ${task.title ?? ''}`) && task.status !== 'complete');
   const blocked = tasks.filter((task) => Boolean(task.blocker_reason) && task.status !== 'complete' && !waitingOnPhilip.some((waiting) => waiting.id === task.id));
@@ -114,7 +115,7 @@ export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, o
         </button>
       </section>
 
-      <DeepWorkHealthPanel />
+      <DeepWorkHealthPanel data={protectedWork} />
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel title="Needs Philip" subtitle="Approvals, device tests, decisions, or external actions.">
