@@ -304,3 +304,12 @@ Design implication: Mission Control should organize the portfolio around these d
 - Philip clarified the nuance: CoverageIQ is owned by Philip/us, not Hawco Productions, but it is incorporated into the Hawco CRM and used for Philip's role as development executive at Hawco Productions.
 - Mission Control should model it as a revenue/product asset with a Hawco operational use case and CRM integration dependency.
 - Practical lane: show CoverageIQ in revenue-generating projects/businesses for ownership/strategy, and cross-link it under Hawco Productions platform work because it supports Philip's Hawco development-exec workflow.
+
+## Portfolio authority gradient — Apr 27, 2026
+Philip confirmed the authority model should vary by lane:
+1. Hawco Productions — most cautious. Relationship, partner, legal, business, and brand stakes are highest. Prepare/research/draft/audit freely, but external actions and commitments require explicit confirmation.
+2. Company Theatre — cautious, especially around Mirvish, board, donors, artists, press, sponsors, legal/brand issues, and Jackpot Twins production commitments. Mildred can prepare and recommend proactively; external/commitment-bearing actions require confirmation.
+3. Internal revenue/product projects — Self-e-Tape, CoverageIQ, Mission Control/OpenClaw work can be more proactive as long as work clearly advances the main goals. Approval still required for paid builds/submissions, spending, public launch/marketing, external outreach, irreversible actions, or major pivots.
+4. AI/OpenClaw/productivity frontier — very proactive for research, prototyping, audits, dashboards, and internal process improvements, provided private data is protected and external systems are not changed without approval.
+
+Design implication: Mission Control should show lane-specific caution/authority so Philip can trust what Mildred will do quietly vs what needs explicit approval.
