@@ -359,3 +359,8 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Purpose: close the loop on what was accomplished, what moved forward, what still needs doing, what protected work happened, and what tomorrow's highest-impact priorities should be.
 - It should complement the Morning Command Queue: evening = recap + tomorrow setup; morning = decisions/actions + current-day focus.
 - Evening recap should use the same plain split: Done/verified, Moved forward, Still needs doing, Blocked/waiting on Philip, Protected work/accountability, Recommended priorities for tomorrow.
+
+## Evening check-in schedule — Apr 27, 2026
+- Philip set the default Evening Check-in time to 9:00 PM Toronto/Eastern.
+- Cron created: `Evening Check-in and Tomorrow Setup`, job id `94f0f38f-3be5-45b3-949b-2cb2e5ba742f`, schedule `0 21 * * *` America/Toronto.
+- Delivery: Telegram announce to Philip.
