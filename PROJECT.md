@@ -375,3 +375,10 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Created `/Users/mildred/.openclaw/workspace/memory/protected-work-log.md`.
 - Track writing, reading, workout, auditions/acting work, networking, and TV/industry watching.
 - Purpose: spot patterns and adjust recommendations, not create guilt or a moral scorecard.
+
+## Creative / Deep Work Health panel — Apr 27, 2026
+- Philip approved showing the rolling weekly protected-work view visually in Mission Control.
+- Added `Creative / Deep Work Health` panel to Command Hub.
+- Initial version shows protected categories and weekly placeholders; next phase should connect it to `memory/protected-work-log.md` or a backend store for real completion/miss state.
+- Tone remains accountability without guilt.
+- Verification: `npm run build` passed.

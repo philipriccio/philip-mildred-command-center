@@ -1,3 +1,4 @@
+import { DeepWorkHealthPanel } from './DeepWorkHealthPanel';
 import { Panel, StatusBadge, type StatusId } from './ui';
 import type { Task } from '../types';
 
@@ -112,6 +113,8 @@ export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, o
           <p className="mt-1 text-sm text-slate-400">Recently Verified</p>
         </button>
       </section>
+
+      <DeepWorkHealthPanel />
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel title="Needs Philip" subtitle="Approvals, device tests, decisions, or external actions.">
