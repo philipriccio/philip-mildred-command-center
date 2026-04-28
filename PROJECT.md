@@ -382,3 +382,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Initial version shows protected categories and weekly placeholders; next phase should connect it to `memory/protected-work-log.md` or a backend store for real completion/miss state.
 - Tone remains accountability without guilt.
 - Verification: `npm run build` passed.
+
+## Protected-work view model refinement — Apr 27, 2026
+- Philip clarified the protected-work view should not be based on per-day checkboxes.
+- Better model: weekly time committed and meaningful progress/outcomes by category.
+- Updated `memory/protected-work-log.md` to track category, time committed, progress/outcome, and notes.
+- Mission Control Deep Work Health panel should evolve from daily dots to weekly time/progress summaries.
