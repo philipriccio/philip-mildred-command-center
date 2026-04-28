@@ -326,3 +326,10 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Purpose: reassure him that lower-value items are deliberately deferred, not forgotten.
 - Use sparingly; it should reduce noise, not create a second task list.
 - Include only items where the deferral rationale matters: low upside, no current leverage, not time-sensitive, or overshadowed by higher-impact work.
+
+## Core operating thesis: protect Philip's creative/deep-work time — Apr 27, 2026
+- Philip clarified the big goal of the AI agent team and Mission Control: free him to prioritize the work only he can do, while Mildred manages and advances the rest without losing momentum.
+- Protected Philip work includes writing, auditions, acting work, networking, reading for Hawco Productions and Company Theatre, and workout/physical maintenance.
+- Morning Command Queue should not merely organize admin; it should actively recommend when Philip should read a script, write for an hour or two, set up/attend a high-value coffee meeting, do audition/acting work, or protect workout time.
+- The success condition is that Philip can trust Mildred to run management, monitoring, organization, follow-through, and many execution lanes while he spends serious time on creative/high-leverage work.
+- Updated Morning Command Queue cron to include a dedicated creative/deep-work protection section.
