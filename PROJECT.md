@@ -242,3 +242,10 @@ This confirms the project was considered active and worth preserving alongside o
 - Cron created: `Morning Command Queue`, job id `b8ccf958-b91d-4957-aca6-9e31a38366b7`, schedule `30 7 * * *` America/Toronto.
 - Required output: Needs Philip, approve/hold/reject items, Philip actions, blockers/risks, Mildred recommended day plan, and point-form accomplishments since last check-in.
 - Must verify live sources where needed and avoid stale/noisy items.
+
+## Dual-path Command Queue answers — Apr 27, 2026
+- Philip approved both Telegram and Mission Control as valid ways to answer the Morning Command Queue.
+- Telegram path: Philip can copy the queue and put answers next to questions in chat.
+- Mission Control path: Command Hub now shows simple action buttons on Needs Philip items: Approve, Hold, Reject, Discuss / Details.
+- This is the first implementation of one-tap queue clearing; deeper per-item answer forms can be added next for nuanced text responses.
+- Verification: `npm run build` passed.

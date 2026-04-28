@@ -5,6 +5,9 @@ interface CommandHubPageProps {
   tasks: Task[];
   onOpenTask: (taskId: string) => void;
   onOpenView: (view: 'office' | 'dashboard' | 'ops' | 'board' | 'projects') => void;
+  onApproveTask: (taskId: string) => void;
+  onHoldTask: (taskId: string) => void;
+  onRejectTask: (taskId: string) => void;
 }
 
 function taskSummary(task: Task) {
@@ -22,16 +25,15 @@ function taskStatusLabel(status: StatusId) {
   }
 }
 
-function TaskRow({ task, onOpenTask }: { task: Task; onOpenTask: (taskId: string) => void }) {
+function TaskRow({ task, onOpenTask, onApproveTask, onHoldTask, onRejectTask, actionMode = false }: { task: Task; onOpenTask: (taskId: string) => void; onApproveTask?: (taskId: string) => void; onHoldTask?: (taskId: string) => void; onRejectTask?: (taskId: string) => void; actionMode?: boolean }) {
   return (
-    <button
-      onClick={() => onOpenTask(task.id)}
-      className="w-full rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-slate-600 hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-    >
+    <div className="w-full rounded-2xl border border-slate-800 bg-slate-950/60 p-4 text-left transition hover:border-slate-600 hover:bg-slate-900">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-medium text-slate-100">{task.title}</p>
-          <p className="mt-1 line-clamp-2 text-sm text-slate-400">{taskSummary(task)}</p>
+          <button onClick={() => onOpenTask(task.id)} className="block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 rounded">
+            <p className="truncate font-medium text-slate-100">{task.title}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-slate-400">{taskSummary(task)}</p>
+          </button>
         </div>
         <StatusBadge status={task.status} />
       </div>
@@ -40,7 +42,15 @@ function TaskRow({ task, onOpenTask }: { task: Task; onOpenTask: (taskId: string
         <span className="rounded-full border border-slate-800 px-2 py-1">{task.lane_name || 'No lane'}</span>
         <span className="rounded-full border border-slate-800 px-2 py-1">{taskStatusLabel(task.status)}</span>
       </div>
-    </button>
+      {actionMode && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button onClick={() => onApproveTask?.(task.id)} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300">Approve</button>
+          <button onClick={() => onHoldTask?.(task.id)} className="rounded-lg bg-amber-400 px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200">Hold</button>
+          <button onClick={() => onRejectTask?.(task.id)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-red-400 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">Reject</button>
+          <button onClick={() => onOpenTask(task.id)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:border-blue-400 hover:text-blue-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300">Discuss / Details</button>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -48,7 +58,7 @@ function EmptyPanel({ message }: { message: string }) {
   return <div className="rounded-2xl border border-dashed border-slate-800 bg-slate-950/50 p-5 text-sm text-slate-500">{message}</div>;
 }
 
-export function CommandHubPage({ tasks, onOpenTask, onOpenView }: CommandHubPageProps) {
+export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, onHoldTask, onRejectTask }: CommandHubPageProps) {
   const needsPhilip = tasks.filter((task) => task.status === 'verification' || /philip|approval|approve|decision|test/i.test(`${task.next_step ?? ''} ${task.request_summary ?? ''} ${task.blocker_reason ?? ''}`));
   const blocked = tasks.filter((task) => Boolean(task.blocker_reason) && task.status !== 'complete');
   const active = tasks.filter((task) => ['in_progress', 'ready'].includes(task.status) && !task.blocker_reason);
@@ -101,7 +111,7 @@ export function CommandHubPage({ tasks, onOpenTask, onOpenView }: CommandHubPage
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel title="Needs Philip" subtitle="Approvals, device tests, decisions, or external actions.">
           <div className="space-y-3">
-            {needsPhilip.length === 0 ? <EmptyPanel message="No approvals or decisions are waiting right now." /> : needsPhilip.slice(0, 6).map((task) => <TaskRow key={task.id} task={task} onOpenTask={onOpenTask} />)}
+            {needsPhilip.length === 0 ? <EmptyPanel message="No approvals or decisions are waiting right now." /> : needsPhilip.slice(0, 6).map((task) => <TaskRow key={task.id} task={task} onOpenTask={onOpenTask} onApproveTask={onApproveTask} onHoldTask={onHoldTask} onRejectTask={onRejectTask} actionMode />)}
           </div>
         </Panel>
         <Panel title="Mildred Moving" subtitle="Work that is active or prepared without needing babysitting.">

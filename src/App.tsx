@@ -261,6 +261,33 @@ function App() {
     }
   };
 
+
+  const quickQueueAction = async (taskId: string, action: 'approve' | 'hold' | 'reject') => {
+    if (action === 'approve') {
+      await fetch(`${API_BASE}/api/tasks/${taskId}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: 'Approved from Mission Control Command Queue.' }),
+      });
+    } else if (action === 'hold') {
+      await fetch(`${API_BASE}/api/tasks/${taskId}/move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ready', blocker_reason: 'Held by Philip from Mission Control Command Queue.' }),
+      });
+    } else {
+      await fetch(`${API_BASE}/api/tasks/${taskId}/send-back`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ notes: 'Rejected/sent back from Mission Control Command Queue.' }),
+      });
+    }
+    await fetchAll();
+    if (detailTask?.id === taskId) {
+      setDetailTask(await loadTaskDetail(taskId));
+    }
+  };
+
   const assignTask = async (taskId: string, agentId: string) => {
     await fetch(`${API_BASE}/api/tasks/${taskId}/assign`, {
       method: 'POST',
@@ -392,6 +419,9 @@ function App() {
             tasks={tasks}
             onOpenTask={(taskId) => void openTaskDetail(taskId)}
             onOpenView={setViewMode}
+            onApproveTask={(taskId) => void quickQueueAction(taskId, 'approve')}
+            onHoldTask={(taskId) => void quickQueueAction(taskId, 'hold')}
+            onRejectTask={(taskId) => void quickQueueAction(taskId, 'reject')}
           />
         )}
 
