@@ -320,3 +320,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Low-value routine items should not dominate unless they are high-priority, time-sensitive, or have tangible upside/risk.
 - Good recommendation shape: "Do X and Y today because they materially move [goal] by [result/upside/risk reduction]."
 - Mission Control should rank recommendations by tangible results: revenue, product viability, relationship leverage, production deadlines, strategic opportunity, trust/risk reduction, or operational unblock.
+
+## Not worth attention section — Apr 27, 2026
+- Philip approved a small "not worth your attention today" section when useful.
+- Purpose: reassure him that lower-value items are deliberately deferred, not forgotten.
+- Use sparingly; it should reduce noise, not create a second task list.
+- Include only items where the deferral rationale matters: low upside, no current leverage, not time-sensitive, or overshadowed by higher-impact work.
