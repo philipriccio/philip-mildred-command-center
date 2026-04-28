@@ -287,3 +287,10 @@ Philip clarified the durable portfolio hierarchy Mission Control should use:
 5. Staying on top of advancements in AI, OpenClaw, and how Philip/Mildred use them to increase productivity, ambition, and success.
 
 Design implication: Mission Control should organize the portfolio around these durable lanes, while still surfacing the current urgent operational edge inside each lane.
+
+## CoverageIQ active Hawco platform lane — Apr 27, 2026
+- Philip clarified CoverageIQ should be active Hawco Productions/platform work, not parked.
+- It was taken down temporarily for a reason Philip does not currently remember; Mildred must investigate and recover the rationale before making restart changes.
+- Initial live check: `https://coverageiq.companytheatre.ca` returns HTTP 503; `https://api.coverageiq.companytheatre.ca/health` does not resolve.
+- Known historical deployment note: CoverageIQ had Coolify frontend/backend/database resources and pending DNS/deploy verification in `projects/coverageiq/COOLIFY_MIGRATION_REPORT.md`.
+- Mission Control portfolio should treat CoverageIQ as active-but-unhealthy, with next action to diagnose Coolify/DNS/deploy state.
