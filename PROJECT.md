@@ -277,3 +277,13 @@ This confirms the project was considered active and worth preserving alongside o
   - Still needs doing
   - Blocked / waiting on Philip, if applicable
 - Avoid activity theatre: report concrete movement, evidence, and remaining work.
+
+## Portfolio priority model — Apr 27, 2026
+Philip clarified the durable portfolio hierarchy Mission Control should use:
+1. Hawco Productions — ongoing work, including improving the CRM and CoverageIQ/platform systems.
+2. Company Theatre — current top priority is Jackpot Twins.
+3. Revenue-generating projects/businesses — current priority is Self-e-Tape.
+4. Philip's freelance acting/directing/writing career — limited operational leverage for now, but long-term Jackpot Twins goal includes licensing productions in New York, Chicago, London, and as many Canadian productions as possible, not produced by Company Theatre but licensed to other theatres.
+5. Staying on top of advancements in AI, OpenClaw, and how Philip/Mildred use them to increase productivity, ambition, and success.
+
+Design implication: Mission Control should organize the portfolio around these durable lanes, while still surfacing the current urgent operational edge inside each lane.
