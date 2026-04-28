@@ -1,48 +1,95 @@
 const CATEGORIES = [
-  { key: 'writing', label: 'Writing', note: 'Hardest / protect first', tone: 'bg-red-500' },
-  { key: 'reading', label: 'Reading', note: 'Hawco + CT leverage', tone: 'bg-amber-400' },
-  { key: 'workout', label: 'Workout', note: 'Daily must', tone: 'bg-emerald-400' },
-  { key: 'acting', label: 'Auditions / acting', note: 'Craft + career', tone: 'bg-purple-400' },
-  { key: 'networking', label: 'Networking', note: 'Relationship leverage', tone: 'bg-sky-400' },
-  { key: 'tv', label: 'TV / industry watching', note: 'Hawco development work', tone: 'bg-indigo-400' },
+  {
+    key: 'writing',
+    label: 'Writing',
+    goal: 'Protect focused pages / rewrite progress',
+    time: 'unknown',
+    progress: 'No confirmed writing time logged yet this week.',
+    tone: 'border-red-500/30 bg-red-500/10 text-red-100',
+  },
+  {
+    key: 'reading',
+    label: 'Reading',
+    goal: 'Hawco + Company Theatre development leverage',
+    time: 'unknown',
+    progress: 'No confirmed reading progress logged yet this week.',
+    tone: 'border-amber-400/30 bg-amber-400/10 text-amber-100',
+  },
+  {
+    key: 'workout',
+    label: 'Workout',
+    goal: 'Daily physical maintenance',
+    time: 'unknown',
+    progress: 'No confirmed workouts logged yet this week.',
+    tone: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-100',
+  },
+  {
+    key: 'acting',
+    label: 'Auditions / acting',
+    goal: 'Craft + career opportunities',
+    time: 'unknown',
+    progress: 'No confirmed audition or acting-work progress logged yet.',
+    tone: 'border-purple-400/30 bg-purple-400/10 text-purple-100',
+  },
+  {
+    key: 'networking',
+    label: 'Networking',
+    goal: 'High-leverage relationships',
+    time: 'unknown',
+    progress: 'No confirmed networking progress logged yet this week.',
+    tone: 'border-sky-400/30 bg-sky-400/10 text-sky-100',
+  },
+  {
+    key: 'tv',
+    label: 'TV / industry watching',
+    goal: 'Legitimate Hawco development work',
+    time: 'unknown',
+    progress: 'No confirmed industry-watching progress logged yet this week.',
+    tone: 'border-indigo-400/30 bg-indigo-400/10 text-indigo-100',
+  },
 ];
 
 export function DeepWorkHealthPanel() {
   return (
     <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Creative / Deep Work Health</p>
-          <h3 className="mt-2 text-lg font-semibold text-slate-100">Rolling weekly view</h3>
-          <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
-            This is accountability without guilt: did the work only Philip can do get protected while Mildred moved the rest?
+          <h3 className="mt-2 text-lg font-semibold text-slate-100">Weekly time + progress</h3>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">
+            This is not a daily checkbox scorecard. It tracks whether time and meaningful progress are being protected for the work only Philip can do.
           </p>
         </div>
-        <span className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-400">Private signal</span>
+        <div className="rounded-2xl border border-slate-800 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">
+          <span className="block text-xs uppercase tracking-[0.2em] text-slate-500">This week</span>
+          <span className="mt-1 block font-medium text-slate-100">No confirmed entries yet</span>
+        </div>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-5 grid gap-3 xl:grid-cols-2">
         {CATEGORIES.map((category) => (
-          <div key={category.key} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4">
-            <div className="flex items-center gap-3">
-              <span className={`h-3 w-3 rounded-full ${category.tone}`} />
-              <p className="font-medium text-slate-100">{category.label}</p>
+          <div key={category.key} className={`rounded-2xl border p-4 ${category.tone}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <p className="font-semibold">{category.label}</p>
+                <p className="mt-1 text-xs opacity-75">{category.goal}</p>
+              </div>
+              <div className="rounded-xl border border-current/20 bg-black/20 px-3 py-2 text-right">
+                <span className="block text-[10px] uppercase tracking-[0.2em] opacity-70">Time</span>
+                <span className="text-sm font-semibold">{category.time}</span>
+              </div>
             </div>
-            <p className="mt-1 text-xs text-slate-500">{category.note}</p>
-            <div className="mt-4 grid grid-cols-7 gap-1" aria-label={`${category.label} weekly tracking placeholders`}>
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, index) => (
-                <div key={`${category.key}-${day}-${index}`} className="rounded-lg border border-slate-800 bg-slate-900/80 py-1 text-center text-[10px] text-slate-500">
-                  {day}
-                </div>
-              ))}
+            <div className="mt-4 rounded-xl border border-current/15 bg-black/15 p-3 text-sm leading-6 opacity-90">
+              {category.progress}
             </div>
           </div>
         ))}
       </div>
 
-      <p className="mt-4 text-xs text-slate-500">
-        Next step: connect this panel to <code className="rounded bg-slate-950 px-1 py-0.5">memory/protected-work-log.md</code> so known completions and misses render automatically.
-      </p>
+      <div className="mt-4 rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-sm leading-6 text-slate-400">
+        <span className="font-medium text-slate-200">Next wiring step: </span>
+        connect this panel to <code className="rounded bg-slate-900 px-1 py-0.5">memory/protected-work-log.md</code> or a backend store so time/progress updates automatically from known context and Philip reports.
+      </div>
     </section>
   );
 }

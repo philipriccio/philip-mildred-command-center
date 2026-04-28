@@ -388,3 +388,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Better model: weekly time committed and meaningful progress/outcomes by category.
 - Updated `memory/protected-work-log.md` to track category, time committed, progress/outcome, and notes.
 - Mission Control Deep Work Health panel should evolve from daily dots to weekly time/progress summaries.
+
+## Deep Work Health panel model update — Apr 27, 2026
+- Updated Mission Control's Creative / Deep Work Health panel to match Philip's preferred model: weekly time committed and meaningful progress/outcome, not per-day checkboxes.
+- Panel now shows category, goal, time committed, and progress/outcome placeholders for writing, reading, workout, auditions/acting, networking, and TV/industry watching.
+- Next step remains wiring the panel to `memory/protected-work-log.md` or a backend store.
+- Verification: `npm run build` passed.
