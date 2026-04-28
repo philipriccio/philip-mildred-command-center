@@ -249,3 +249,9 @@ This confirms the project was considered active and worth preserving alongside o
 - Mission Control path: Command Hub now shows simple action buttons on Needs Philip items: Approve, Hold, Reject, Discuss / Details.
 - This is the first implementation of one-tap queue clearing; deeper per-item answer forms can be added next for nuanced text responses.
 - Verification: `npm run build` passed.
+
+## Approval button safety rule — Apr 27, 2026
+- Philip confirmed that `Approve` in Mission Control should not by itself authorize external actions.
+- Meaning: Approve can clear/advance an internal planning item, but external sends/actions still require explicit second confirmation.
+- Explicit second confirmation remains required for sending emails/messages, triggering paid builds/submissions, contacting people, spending money, publishing, public announcements, or other irreversible/external effects.
+- Mission Control should visually distinguish “approved to prepare/proceed internally” from “external action confirmed.”
