@@ -148,7 +148,7 @@ export function CommandHubPage({ tasks, protectedWork, onOpenTask, onOpenView, o
           <div className="grid gap-3 sm:grid-cols-2">
             <button onClick={() => onOpenView('ops')} className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-left hover:bg-red-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
               <p className="font-medium text-red-100">Self-e-Tape Ops</p>
-              <p className="mt-1 text-sm text-red-100/70">Build 278 truth gate, diagnostics, product lanes.</p>
+              <p className="mt-1 text-sm text-red-100/70">Build 279 truth gate, diagnostics, product lanes.</p>
             </button>
             <button onClick={() => onOpenView('projects')} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-left hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
               <p className="font-medium text-slate-100">All Projects</p>

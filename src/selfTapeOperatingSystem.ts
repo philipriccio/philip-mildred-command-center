@@ -5,7 +5,7 @@ export const selfTapeOpsData: SelfTapeOpsData = {
     goal: 'Become the best and most-used self-tape app on the market.',
     strategy: 'First build actor trust through a beautiful, reliable audition workflow. Then turn that trust into awareness and adoption.',
     phase: 'Controlled TestFlight validation + product operating-system buildout',
-    currentRecommendation: 'Build 278 is uploaded to App Store Connect/TestFlight. Hold the build path, watch diagnostics, and prepare a focused device-test pass for import → reader → record → keep → review → combined/separate export.',
+    currentRecommendation: 'Build 279 is uploaded to App Store Connect/TestFlight. Hold the build path, watch diagnostics, and prepare the focused first-cue device test before broader import → reader → record → keep → review → export QA.',
   },
   authority: {
     green: [
@@ -123,7 +123,7 @@ export const selfTapeOpsData: SelfTapeOpsData = {
       status: 'CANNOT VERIFY — needs device test',
     },
     {
-      title: 'Build 278 is not release proof until Apple/TestFlight processing and device QA complete.',
+      title: 'Build 279 is not release proof until Apple/TestFlight processing and device QA complete.',
       severity: 'high',
       owner: 'Philip device-tests; Mildred monitors diagnostics',
       status: 'Awaiting TestFlight/device truth.',
@@ -160,7 +160,7 @@ export const selfTapeOpsData: SelfTapeOpsData = {
   ],
   decisions: [
     {
-      title: 'When Build 278 appears in TestFlight, should Philip run the full trust-gate script?',
+      title: 'When Build 279 appears in TestFlight, should Philip run the focused native-reader trust test first?',
       neededFrom: 'Philip when ready for device testing.',
       recommendation: 'Yes — one focused pass is more useful than casual testing because it will prove or isolate the core actor journey.',
       timing: 'When Apple/TestFlight processing completes and Philip has a quiet window.',
@@ -180,8 +180,8 @@ export const selfTapeOpsData: SelfTapeOpsData = {
   ],
   watchedSignals: [
     {
-      signal: 'Apple/TestFlight Build 278 processing and diagnostics events',
-      whyItMatters: 'Build 278 is the current trust-gate build; device use should produce either confidence or actionable redacted diagnostic events.',
+      signal: 'Apple/TestFlight Build 279 processing and diagnostics events',
+      whyItMatters: 'Build 279 is the current native-reader trust-gate build; device use should prove first-cue audibility or produce actionable redacted diagnostic evidence.',
       response: 'Wait for Philip readiness, then monitor import/reader/record/export failures by build and flow.',
     },
     {
@@ -202,7 +202,7 @@ export const selfTapeOpsData: SelfTapeOpsData = {
   ],
   actionPackets: [
     {
-      title: 'Build 278 device-truth packet',
+      title: 'Build 279 device-truth packet',
       owner: 'Shared',
       status: 'ready',
       approvalNeeded: false,
@@ -243,7 +243,7 @@ export const selfTapeOpsData: SelfTapeOpsData = {
       title: 'Import William and confirm scene/role truth',
       purpose: 'Prove the parser/display path preserves the audition scenes and maps WILLIAM OLESON to WILLIAM without making actor lines reader lines.',
       steps: [
-        'Install/open Build 278 when it is available in TestFlight.',
+        'Install/open Build 279 when it is available in TestFlight.',
         'Import the William sides from the same PDF used in Build 275 testing.',
         'Confirm Scene 1 and Scene 2 are both reachable.',
         'Choose William/Oleson as the actor role and inspect that William actor lines are not assigned to AI reader voices.',

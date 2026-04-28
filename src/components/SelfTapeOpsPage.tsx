@@ -170,7 +170,7 @@ export function SelfTapeOpsPage({ apiBase }: { apiBase: string }) {
         )}
       </Panel>
 
-      <Panel title="Build 278 device-test packet" subtitle="A focused trust-gate pass for when Philip is ready. This is the path that turns Build 278 from uploaded binary into product evidence.">
+      <Panel title="Build 279 device-test packet" subtitle="A focused trust-gate pass for when Philip is ready. This is the path that turns Build 279 from uploaded binary into product evidence.">
         <div className="grid gap-3 lg:grid-cols-2">
           {data.deviceTestScript.map((item) => (
             <div key={item.title} className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">

@@ -1770,7 +1770,7 @@ function emptyDiagnosticSummary() {
     byType: [],
     lastEventAt: null,
     readiness: 'no-events' as const,
-    recommendation: 'No diagnostic events are visible yet. This can mean Build 278 has not been tested, telemetry is not configured, or no failures have occurred.',
+    recommendation: 'No diagnostic events are visible yet. This can mean Build 279 has not been tested, telemetry is not configured, or no failures have occurred.',
   };
 }
 
@@ -1830,7 +1830,7 @@ function summarizeDiagnosticEvents(events: SafeDiagnosticEventRow[]) {
 
   if (summary.critical > 0 || summary.error > 0) {
     summary.readiness = 'investigate';
-    summary.recommendation = 'Investigate diagnostic failures before treating Build 278 as a trust pass.';
+    summary.recommendation = 'Investigate diagnostic failures before treating Build 279 as a trust pass.';
   } else if (summary.warning > 0) {
     summary.readiness = 'watch';
     summary.recommendation = 'Warnings are present. Continue the device script, but review patterns before the next build decision.';
@@ -1919,13 +1919,23 @@ app.get('/api/selftape/status', async (_req, res) => {
   const buildNumber = readBuildNumber(path.join(sourcePath, 'app.json'));
   const buildAttempts = readBuildAttempts(path.join(sourcePath, 'BUILD-LOG.md'));
   const easIncident = await readExpoIncident();
+  const latestAttempt = buildAttempts[buildAttempts.length - 1];
   const recommendedAction = easIncident.active
-    ? 'Wait for Expo/EAS iOS workers to recover, then attempt one monitored build retry.'
+    ? 'Expo/EAS incident active: hold build/deploy actions and monitor.'
     : dirty
-      ? 'Clean or commit the SelfTape working tree before the next build retry.'
-      : 'Run one monitored production iOS build retry, then submit to TestFlight only if it completes cleanly.';
+      ? 'Clean or commit the SelfTape working tree before any build/release decision.'
+      : latestAttempt?.build === '279'
+        ? 'Build 279 is submitted. Wait for TestFlight availability, then run the focused device test: first AI cue audible/no Reader playback failed.'
+        : 'No current submitted trust-gate build found. Prepare one monitored production iOS build only with explicit approval.';
 
-  res.json({ branch, head, dirty, buildNumber, easIncident, buildAttempts, recommendedAction, sourcePath });
+  const appleProcessing = {
+    build: latestAttempt?.build ?? buildNumber ?? 'unknown',
+    status: latestAttempt?.status?.toLowerCase().includes('submitted') ? 'processing' : 'unknown',
+    testFlightUrl: 'https://appstoreconnect.apple.com/apps/6759764430/testflight/ios',
+    submittedAt: null,
+  };
+
+  res.json({ branch, head, dirty, buildNumber, appleProcessing, easIncident, buildAttempts, recommendedAction, sourcePath });
 });
 
 app.get('/api/selftape/diagnostics', async (req, res) => {
