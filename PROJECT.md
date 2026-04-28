@@ -333,3 +333,11 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Morning Command Queue should not merely organize admin; it should actively recommend when Philip should read a script, write for an hour or two, set up/attend a high-value coffee meeting, do audition/acting work, or protect workout time.
 - The success condition is that Philip can trust Mildred to run management, monitoring, organization, follow-through, and many execution lanes while he spends serious time on creative/high-leverage work.
 - Updated Morning Command Queue cron to include a dedicated creative/deep-work protection section.
+
+## Philip deep-work category weighting — Apr 27, 2026
+- Philip clarified that writing and reading are probably on par in value.
+- Workout is a daily must, not optional.
+- Watching TV/industry material is important Hawco Productions development work, even though it can feel like a luxury.
+- All protected categories matter: writing, reading, auditions, acting work, networking, watching TV/industry material, and workout.
+- Writing needs special protection because it is hardest, requires the most focus, and is the one Philip procrastinates on most.
+- Morning Command Queue cron updated with these weights.
