@@ -268,3 +268,12 @@ This confirms the project was considered active and worth preserving alongside o
 - Examples: check TestFlight/build state, confirm an email/send state, inspect SendGrid/account state, verify a file/status/source of truth.
 - If verification is possible, the item should move through `done reported → verification → cleared` rather than disappearing immediately.
 - If verification is not possible, Mission Control should mark it as `reported done — unverified` or ask for evidence/context.
+
+## Check-in accomplishment report format — Apr 27, 2026
+- Philip wants check-ins to include both completed work and meaningful forward movement that is not finished yet.
+- Required split:
+  - Done / verified
+  - Moved forward
+  - Still needs doing
+  - Blocked / waiting on Philip, if applicable
+- Avoid activity theatre: report concrete movement, evidence, and remaining work.
