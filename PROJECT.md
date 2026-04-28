@@ -364,3 +364,8 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Philip set the default Evening Check-in time to 9:00 PM Toronto/Eastern.
 - Cron created: `Evening Check-in and Tomorrow Setup`, job id `94f0f38f-3be5-45b3-949b-2cb2e5ba742f`, schedule `0 21 * * *` America/Toronto.
 - Delivery: Telegram announce to Philip.
+
+## Evening protected-work question rule — Apr 27, 2026
+- Philip said the evening check-in should ask about protected work only if Mildred does not already know from context.
+- Default: infer from the day's conversation/logs where possible; ask only when the missing information is useful for accountability or next-day planning.
+- Evening check-in cron updated accordingly.
