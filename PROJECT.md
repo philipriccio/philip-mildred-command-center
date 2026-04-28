@@ -236,3 +236,9 @@ This confirms the project was considered active and worth preserving alongside o
 - Philip and Mildred will still chat naturally through the day, but the queue is the baseline anti-idling mechanism.
 - Each check-in should include a point-form report of everything accomplished since the last check-in, focused on real verified progress rather than activity theatre.
 - Design implication: Mission Control needs a durable “Since last check-in” section plus clear item states: needs Philip, approved, held, in progress, blocked, done/verified.
+
+## Morning Command Queue schedule — Apr 27, 2026
+- Philip set the Morning Command Queue default time to 7:30 AM Toronto/Eastern.
+- Cron created: `Morning Command Queue`, job id `b8ccf958-b91d-4957-aca6-9e31a38366b7`, schedule `30 7 * * *` America/Toronto.
+- Required output: Needs Philip, approve/hold/reject items, Philip actions, blockers/risks, Mildred recommended day plan, and point-form accomplishments since last check-in.
+- Must verify live sources where needed and avoid stale/noisy items.
