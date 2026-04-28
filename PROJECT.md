@@ -353,3 +353,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Tone should be accountability without nagging.
 - Purpose: notice patterns, protect neglected high-value work, and adjust recommendations over time.
 - Morning/check-in flow should include a light check such as "Did protected work happen?" and use the answer to refine future recommendations.
+
+## Evening check-in ritual — Apr 27, 2026
+- Philip wants an evening check-in for both daily recap and next-day priority setting.
+- Purpose: close the loop on what was accomplished, what moved forward, what still needs doing, what protected work happened, and what tomorrow's highest-impact priorities should be.
+- It should complement the Morning Command Queue: evening = recap + tomorrow setup; morning = decisions/actions + current-day focus.
+- Evening recap should use the same plain split: Done/verified, Moved forward, Still needs doing, Blocked/waiting on Philip, Protected work/accountability, Recommended priorities for tomorrow.
