@@ -341,3 +341,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - All protected categories matter: writing, reading, auditions, acting work, networking, watching TV/industry material, and workout.
 - Writing needs special protection because it is hardest, requires the most focus, and is the one Philip procrastinates on most.
 - Morning Command Queue cron updated with these weights.
+
+## Flexible deep-work scheduling — Apr 27, 2026
+- Philip wants suggestions for deep-work timing, but not rigid schedules, because his day is unpredictable.
+- Morning Command Queue should suggest flexible windows, sequence, or priority order rather than firm time blocks unless live calendar commitments make a specific time genuinely important.
+- Good shape: "protect the first clear 90 minutes for writing" or "fit workout before the day fragments" rather than pretending the day can be scheduled precisely.
+- Morning Command Queue cron updated accordingly.
