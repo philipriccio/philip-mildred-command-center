@@ -262,3 +262,9 @@ This confirms the project was considered active and worth preserving alongside o
 - Purpose: Philip can quickly see what Mildred needs from him and mark/answer items so work can continue.
 - This should include items like device tests, upgrades, replies, approvals, or human-only actions that block Mildred.
 - Verification: `npm run build` passed.
+
+## Waiting-on-Philip verification rule — Apr 27, 2026
+- Philip confirmed that when he marks a waiting-on-Philip item as done, Mildred should verify it if possible before clearing it.
+- Examples: check TestFlight/build state, confirm an email/send state, inspect SendGrid/account state, verify a file/status/source of truth.
+- If verification is possible, the item should move through `done reported → verification → cleared` rather than disappearing immediately.
+- If verification is not possible, Mission Control should mark it as `reported done — unverified` or ask for evidence/context.
