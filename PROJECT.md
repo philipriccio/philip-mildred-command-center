@@ -313,3 +313,10 @@ Philip confirmed the authority model should vary by lane:
 4. AI/OpenClaw/productivity frontier — very proactive for research, prototyping, audits, dashboards, and internal process improvements, provided private data is protected and external systems are not changed without approval.
 
 Design implication: Mission Control should show lane-specific caution/authority so Philip can trust what Mildred will do quietly vs what needs explicit approval.
+
+## Morning recommended focus filter — Apr 27, 2026
+- Philip wants the Morning Command Queue to include Mildred's recommendation for what to prioritize today.
+- The recommendation must be results-impact driven, connected to overarching goals, not merely oldest task/email cleanup.
+- Low-value routine items should not dominate unless they are high-priority, time-sensitive, or have tangible upside/risk.
+- Good recommendation shape: "Do X and Y today because they materially move [goal] by [result/upside/risk reduction]."
+- Mission Control should rank recommendations by tangible results: revenue, product viability, relationship leverage, production deadlines, strategic opportunity, trust/risk reduction, or operational unblock.
