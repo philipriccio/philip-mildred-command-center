@@ -60,7 +60,8 @@ function EmptyPanel({ message }: { message: string }) {
 
 export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, onHoldTask, onRejectTask }: CommandHubPageProps) {
   const needsPhilip = tasks.filter((task) => task.status === 'verification' || /philip|approval|approve|decision|test/i.test(`${task.next_step ?? ''} ${task.request_summary ?? ''} ${task.blocker_reason ?? ''}`));
-  const blocked = tasks.filter((task) => Boolean(task.blocker_reason) && task.status !== 'complete');
+  const waitingOnPhilip = tasks.filter((task) => /philip/i.test(`${task.next_step ?? ''} ${task.request_summary ?? ''} ${task.blocker_reason ?? ''} ${task.title ?? ''}`) && task.status !== 'complete');
+  const blocked = tasks.filter((task) => Boolean(task.blocker_reason) && task.status !== 'complete' && !waitingOnPhilip.some((waiting) => waiting.id === task.id));
   const active = tasks.filter((task) => ['in_progress', 'ready'].includes(task.status) && !task.blocker_reason);
   const recentlyDone = tasks.filter((task) => task.status === 'complete').slice(0, 5);
 
@@ -89,7 +90,7 @@ export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, o
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-5">
         <button onClick={() => onOpenView('office')} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
           <p className="text-2xl font-semibold text-slate-100">{needsPhilip.length}</p>
           <p className="mt-1 text-sm text-slate-400">Needs Philip</p>
@@ -97,6 +98,10 @@ export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, o
         <button onClick={() => onOpenView('office')} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
           <p className="text-2xl font-semibold text-slate-100">{active.length}</p>
           <p className="mt-1 text-sm text-slate-400">Mildred Moving</p>
+        </button>
+        <button onClick={() => onOpenView('dashboard')} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+          <p className="text-2xl font-semibold text-sky-200">{waitingOnPhilip.length}</p>
+          <p className="mt-1 text-sm text-slate-400">Waiting on Philip</p>
         </button>
         <button onClick={() => onOpenView('dashboard')} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
           <p className="text-2xl font-semibold text-amber-200">{blocked.length}</p>
@@ -122,11 +127,19 @@ export function CommandHubPage({ tasks, onOpenTask, onOpenView, onApproveTask, o
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <Panel title="Waiting on Philip" subtitle="Human actions I need back from you so I can keep moving.">
+          <div className="space-y-3">
+            {waitingOnPhilip.length === 0 ? <EmptyPanel message="Nothing is currently waiting on you." /> : waitingOnPhilip.slice(0, 6).map((task) => <TaskRow key={task.id} task={task} onOpenTask={onOpenTask} onApproveTask={onApproveTask} onHoldTask={onHoldTask} onRejectTask={onRejectTask} actionMode />)}
+          </div>
+        </Panel>
         <Panel title="Blocked / Risk" subtitle="Where progress is constrained and why.">
           <div className="space-y-3">
             {blocked.length === 0 ? <EmptyPanel message="No active blockers in the task mirror." /> : blocked.slice(0, 6).map((task) => <TaskRow key={task.id} task={task} onOpenTask={onOpenTask} />)}
           </div>
         </Panel>
+      </section>
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel title="Project Cockpits" subtitle="Fast paths into the deeper operating surfaces.">
           <div className="grid gap-3 sm:grid-cols-2">
             <button onClick={() => onOpenView('ops')} className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-left hover:bg-red-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">

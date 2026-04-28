@@ -255,3 +255,10 @@ This confirms the project was considered active and worth preserving alongside o
 - Meaning: Approve can clear/advance an internal planning item, but external sends/actions still require explicit second confirmation.
 - Explicit second confirmation remains required for sending emails/messages, triggering paid builds/submissions, contacting people, spending money, publishing, public announcements, or other irreversible/external effects.
 - Mission Control should visually distinguish “approved to prepare/proceed internally” from “external action confirmed.”
+
+## Waiting on Philip list — Apr 27, 2026
+- Philip clarified Mission Control should track human tasks/actions only when Mildred is waiting on them.
+- Added a first-class `Waiting on Philip` section to Command Hub.
+- Purpose: Philip can quickly see what Mildred needs from him and mark/answer items so work can continue.
+- This should include items like device tests, upgrades, replies, approvals, or human-only actions that block Mildred.
+- Verification: `npm run build` passed.
