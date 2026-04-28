@@ -294,3 +294,8 @@ Design implication: Mission Control should organize the portfolio around these d
 - Initial live check: `https://coverageiq.companytheatre.ca` returns HTTP 503; `https://api.coverageiq.companytheatre.ca/health` does not resolve.
 - Known historical deployment note: CoverageIQ had Coolify frontend/backend/database resources and pending DNS/deploy verification in `projects/coverageiq/COOLIFY_MIGRATION_REPORT.md`.
 - Mission Control portfolio should treat CoverageIQ as active-but-unhealthy, with next action to diagnose Coolify/DNS/deploy state.
+
+## CoverageIQ ownership and product lane — Apr 27, 2026
+- Philip clarified CoverageIQ is owned by Philip/us, not Hawco Productions.
+- Treat CoverageIQ as a possible external revenue product later, while it may still support Hawco-style/internal development workflows.
+- Mission Control should move CoverageIQ out of Hawco-owned work and into the revenue-generating projects/businesses lane, with current status active-but-unhealthy/recovery investigation.
