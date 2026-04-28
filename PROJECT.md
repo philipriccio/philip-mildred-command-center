@@ -229,3 +229,10 @@ This confirms the project was considered active and worth preserving alongside o
   - Project Cockpits: fast paths into Self-e-Tape Ops, Projects, Visual Office, and Systems Dashboard.
 - Design intent: Mission Control should answer “what needs me, what is Mildred handling, what is blocked, what changed?” before showing operational detail.
 - Verification: `npm run build` passed.
+
+## Morning Command Queue operating ritual — Apr 27, 2026
+- Philip approved the Morning Command Queue as the primary daily operating ritual.
+- Purpose: Philip should not have to keep prompting Mildred through the day. Each morning, Mission Control should show the approval/action/decision items that actually need Philip, then Mildred works quietly from the approved/held queue during the day.
+- Philip and Mildred will still chat naturally through the day, but the queue is the baseline anti-idling mechanism.
+- Each check-in should include a point-form report of everything accomplished since the last check-in, focused on real verified progress rather than activity theatre.
+- Design implication: Mission Control needs a durable “Since last check-in” section plus clear item states: needs Philip, approved, held, in progress, blocked, done/verified.
