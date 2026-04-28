@@ -299,3 +299,8 @@ Design implication: Mission Control should organize the portfolio around these d
 - Philip clarified CoverageIQ is owned by Philip/us, not Hawco Productions.
 - Treat CoverageIQ as a possible external revenue product later, while it may still support Hawco-style/internal development workflows.
 - Mission Control should move CoverageIQ out of Hawco-owned work and into the revenue-generating projects/businesses lane, with current status active-but-unhealthy/recovery investigation.
+
+## CoverageIQ ownership vs operational home — Apr 27, 2026
+- Philip clarified the nuance: CoverageIQ is owned by Philip/us, not Hawco Productions, but it is incorporated into the Hawco CRM and used for Philip's role as development executive at Hawco Productions.
+- Mission Control should model it as a revenue/product asset with a Hawco operational use case and CRM integration dependency.
+- Practical lane: show CoverageIQ in revenue-generating projects/businesses for ownership/strategy, and cross-link it under Hawco Productions platform work because it supports Philip's Hawco development-exec workflow.
