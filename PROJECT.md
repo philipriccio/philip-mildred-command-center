@@ -369,3 +369,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Philip said the evening check-in should ask about protected work only if Mildred does not already know from context.
 - Default: infer from the day's conversation/logs where possible; ask only when the missing information is useful for accountability or next-day planning.
 - Evening check-in cron updated accordingly.
+
+## Rolling weekly protected-work view — Apr 27, 2026
+- Philip approved a rolling weekly view for protected work accountability.
+- Created `/Users/mildred/.openclaw/workspace/memory/protected-work-log.md`.
+- Track writing, reading, workout, auditions/acting work, networking, and TV/industry watching.
+- Purpose: spot patterns and adjust recommendations, not create guilt or a moral scorecard.
