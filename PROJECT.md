@@ -347,3 +347,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Morning Command Queue should suggest flexible windows, sequence, or priority order rather than firm time blocks unless live calendar commitments make a specific time genuinely important.
 - Good shape: "protect the first clear 90 minutes for writing" or "fit workout before the day fragments" rather than pretending the day can be scheduled precisely.
 - Morning Command Queue cron updated accordingly.
+
+## Protected-work accountability — Apr 27, 2026
+- Philip wants to try tracking whether protected work actually happened: writing, reading, workout, auditions/acting work, networking, and TV/industry watching.
+- Tone should be accountability without nagging.
+- Purpose: notice patterns, protect neglected high-value work, and adjust recommendations over time.
+- Morning/check-in flow should include a light check such as "Did protected work happen?" and use the answer to refine future recommendations.
