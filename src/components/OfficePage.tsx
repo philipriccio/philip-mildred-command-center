@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 // officeSceneConfig no longer used — 2D canvas has its own desk layout
 import { OfficeCanvas2D, type OfficeAgent as OfficeAgent2D } from './OfficeCanvas2D';
 import { AgentDetailDrawer } from './AgentDetailDrawer';
@@ -134,7 +134,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
     return () => window.clearInterval(interval);
   }, []);
 
-  const fetchAll = async () => {
+  const fetchAll = useCallback(async () => {
     try {
       const [agentsRes, reportsRes, pendingRes, activityRes] = await Promise.all([
         fetch(`${apiBase}/api/office/agents`),
@@ -170,10 +170,12 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
       setActivity([]);
       setUsingFallbackData(true);
     }
-  };
+  }, [apiBase]);
 
   useEffect(() => {
-    fetchAll().catch(console.error);
+    queueMicrotask(() => {
+      fetchAll().catch(console.error);
+    });
 
     const ws = new WebSocket(wsUrl);
     ws.onopen = () => {
@@ -240,7 +242,7 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
     };
 
     return () => ws.close();
-  }, [apiBase, selectedDetail?.id, wsUrl]);
+  }, [apiBase, fetchAll, selectedDetail?.id, wsUrl]);
 
 
   useEffect(() => {

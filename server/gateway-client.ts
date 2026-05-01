@@ -354,7 +354,7 @@ export class GatewayClient {
     }
   }
 
-  private sendConnectRequest(nonce: string): void {
+  private sendConnectRequest(): void {
     const id = randomUUID();
 
     // Track the connect response
@@ -422,7 +422,7 @@ export class GatewayClient {
 
   private processAgentEvent(event: AgentEventPayload): void {
     // Resolve agentId from runId
-    let agentId = this.resolveAgentId(event);
+    const agentId = this.resolveAgentId(event);
     if (!agentId) return;
 
     const parsed = this.parseEvent(agentId, event);

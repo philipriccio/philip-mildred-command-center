@@ -415,3 +415,17 @@ Design implication: Mission Control should show lane-specific caution/authority 
   - Added `.dockerignore` to keep local DB/uploads/env/artifacts out of image build context.
 - Secret-location policy: raw secrets stay in Keychain or deployment secrets; `/Users/mildred/.openclaw/workspace/SECRET-REGISTRY.md` records where to find them without storing raw values.
 - Recommended first online mode: `mission.companytheatre.ca` behind Cloudflare Access or equivalent auth; do not expose OpenClaw gateway port `18789` publicly.
+
+## Mission Control online prep pass — Apr 30, 2026 later
+- Continued online-prep after Philip approved moving forward with hardening.
+- Rebuilt the project knowledge graph for audit; removed generated `knowledge-graph.json` afterward so it is not committed.
+- Endpoint inventory identified high-risk public controls: `/api/gateway/send`, `/api/cron/run/:jobId`, and `/api/selftape/diagnostics/access-token`.
+- Added `COMMAND_CENTER_ENABLE_HIGH_RISK_ACTIONS`; default is disabled. In first public/read-mostly deployment, these high-risk routes return 403 even for authenticated users unless Philip explicitly approves enabling write controls.
+- Lint was reduced from 10 errors to 0 errors; 5 existing hook-dependency warnings remain. Build passes.
+- Local production smoke on port 3999 verified:
+  - unauthenticated `/api/health` returns 401
+  - authenticated `/api/health` returns 200
+  - `/` serves the frontend
+  - high-risk `/api/gateway/send` returns 403 while disabled
+  - gateway token absent, so gateway connection is skipped safely
+- Current state remains prep only: no public deploy, no DNS, no tunnel, no gateway exposure.

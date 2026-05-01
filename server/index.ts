@@ -29,6 +29,7 @@ const COMMAND_CENTER_AUTH_EMAILS = (process.env.COMMAND_CENTER_AUTH_EMAILS ?? ''
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
 const REQUIRE_AUTH = process.env.COMMAND_CENTER_REQUIRE_AUTH === '1' || Boolean(COMMAND_CENTER_AUTH_TOKEN) || COMMAND_CENTER_AUTH_EMAILS.length > 0;
+const ENABLE_HIGH_RISK_ACTIONS = process.env.COMMAND_CENTER_ENABLE_HIGH_RISK_ACTIONS === '1';
 const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname);
 const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(__dirname, '..', 'uploads');
 const TASK_STATUSES = ['backlog', 'ready', 'in_progress', 'verification', 'complete'] as const;
@@ -330,6 +331,14 @@ function requireAuth(req: Request, res: Response, next: () => void) {
   res.status(401).json({ error: 'Unauthorized' });
 }
 
+function requireHighRiskActions(_req: Request, res: Response, next: () => void) {
+  if (ENABLE_HIGH_RISK_ACTIONS) {
+    next();
+    return;
+  }
+  res.status(403).json({ error: 'High-risk Mission Control actions are disabled' });
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -355,6 +364,9 @@ app.use(cors({
 
 app.use(express.json({ limit: '250kb' }));
 app.use('/api', requireAuth);
+app.use('/api/gateway/send', requireHighRiskActions);
+app.use('/api/cron/run', requireHighRiskActions);
+app.use('/api/selftape/diagnostics/access-token', requireHighRiskActions);
 if (ENABLE_PUBLIC_DASHBOARD_TUNNEL) {
   const distPath = path.join(__dirname, '..', 'dist');
   app.use(express.static(distPath));
@@ -2480,6 +2492,7 @@ server.listen(PORT, () => {
   console.log(`Frontend origins: ${FRONTEND_ORIGINS.join(', ')}`);
   console.log(`Auth: ${REQUIRE_AUTH ? 'required' : 'disabled/local-dev'}`);
   console.log(`Allowed proxy emails: ${COMMAND_CENTER_AUTH_EMAILS.length}`);
+  console.log(`High-risk actions: ${ENABLE_HIGH_RISK_ACTIONS ? 'enabled' : 'disabled'}`);
   console.log(`Data dir: ${DATA_DIR}`);
   console.log(`Upload dir: ${UPLOAD_DIR}`);
   console.log(`GitHub: ${octokit ? 'enabled' : 'disabled'}`);

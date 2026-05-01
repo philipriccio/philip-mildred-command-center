@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState, Panel } from './ui';
 import type { CronJob, ProjectDetail, ProjectSummary, WorkItem, WorkItemStatus } from '../types';
 
@@ -92,41 +92,46 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     const response = await fetch(`${apiBase}/api/projects`);
     const data = await response.json();
     setProjects(data);
     if (!selectedId && data[0]?.id) setSelectedId(data[0].id);
-  };
+  }, [apiBase, selectedId]);
 
-  const loadProject = async (projectId: string) => {
+  const loadProject = useCallback(async (projectId: string) => {
     const response = await fetch(`${apiBase}/api/projects/${projectId}`);
     const data = await response.json();
     setDetail(data);
-  };
+  }, [apiBase]);
 
-  const loadCronJobs = async () => {
+  const loadCronJobs = useCallback(async () => {
     const response = await fetch(`${apiBase}/api/cron/jobs`);
     if (!response.ok) return;
     const data = await response.json();
     setCronJobs(data.jobs ?? []);
-  };
+  }, [apiBase]);
 
-  const refresh = async (projectId = selectedId) => {
+  const refresh = useCallback(async (projectId = selectedId) => {
     setLoading(true);
     await loadProjects();
     if (projectId) await loadProject(projectId);
     await loadCronJobs();
     setLoading(false);
-  };
+  }, [loadCronJobs, loadProject, loadProjects, selectedId]);
 
   useEffect(() => {
-    void refresh().catch(console.error);
-  }, []);
+    queueMicrotask(() => {
+      void refresh().catch(console.error);
+    });
+  }, [refresh]);
 
   useEffect(() => {
-    if (selectedId) void loadProject(selectedId).catch(console.error);
-  }, [selectedId]);
+    if (!selectedId) return;
+    queueMicrotask(() => {
+      void loadProject(selectedId).catch(console.error);
+    });
+  }, [loadProject, selectedId]);
 
   const groupedItems = useMemo(() => {
     const groups: Record<WorkItemStatus, WorkItem[]> = { todo: [], in_progress: [], blocked: [], done: [] };

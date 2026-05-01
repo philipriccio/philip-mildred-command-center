@@ -68,7 +68,10 @@ function App() {
   const [notifications, setNotifications] = useState<NotificationToastItem[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notificationsRef = useRef<typeof setNotifications>(setNotifications);
-  notificationsRef.current = setNotifications;
+
+  useEffect(() => {
+    notificationsRef.current = setNotifications;
+  }, []);
 
   const pushNotification = useCallback((title: string, body: string, tone: NotificationToastItem['tone']) => {
     const id = `notif-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -108,7 +111,9 @@ function App() {
   }, []);
 
   useEffect(() => {
-    void fetchAll().catch(console.error);
+    queueMicrotask(() => {
+      void fetchAll().catch(console.error);
+    });
   }, [fetchAll]);
 
   useEffect(() => {
@@ -153,7 +158,7 @@ function App() {
       } catch { /* ignore parse errors */ }
     };
     return () => ws.close();
-  }, [detailTask?.id, editingTask?.id, fetchAll, loadTaskDetail]);
+  }, [detailTask?.id, editingTask?.id, fetchAll, loadTaskDetail, pushNotification]);
 
   const filteredTasks = useMemo(() => {
     return selectedLane === 'all' ? tasks : tasks.filter((task) => task.lane_id === selectedLane);
