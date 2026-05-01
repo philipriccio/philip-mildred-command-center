@@ -10,7 +10,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "smoke:public-boundary": "node scripts/smoke-public-boundary.mjs"
+    "smoke:public-boundary": "node scripts/smoke-public-boundary.mjs",
+    "backup:data": "./scripts/backup.sh",
+    "restore:data": "./scripts/restore.sh"
   },
   "dependencies": {
     "@octokit/rest": "^22.0.1",

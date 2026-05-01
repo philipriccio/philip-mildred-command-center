@@ -442,3 +442,10 @@ Design implication: Mission Control should show lane-specific caution/authority 
   - unauthenticated `/ws` is rejected with policy close 1008
   - authenticated `/ws` opens
 - This is still local proof only. No public deploy, DNS change, tunnel, or gateway exposure has occurred.
+
+## Mission Control backup/restore readiness — Apr 30, 2026
+- Updated `scripts/backup.sh` to honor `DATA_DIR`, `UPLOAD_DIR`, `BACKUP_DIR`, and `BACKUP_RETENTION_DAYS`. It uses SQLite `.backup` when available, writes a manifest, and backs up uploads if present.
+- Added `scripts/restore.sh` with explicit `--force` requirement and pre-restore DB copy. The app must be stopped before restore.
+- Added `docs/DEPLOYMENT-READINESS.md` with the safe public shape, required env, persistent `/data` volume, backup/restore plan, and smoke checklist.
+- Added npm helpers: `backup:data` and `restore:data`.
+- Still no public deploy, DNS change, tunnel, or gateway exposure.
