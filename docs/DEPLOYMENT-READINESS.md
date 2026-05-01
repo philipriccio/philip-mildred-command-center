@@ -89,6 +89,14 @@ DATA_DIR=/data UPLOAD_DIR=/data/uploads ./scripts/restore.sh /data/backups/data_
 - Logs do not print tokens/secrets.
 - OpenClaw Gateway port `18789` is not public.
 
+
+## Runbook and templates
+
+- Production env template: `.env.production.template`
+- Online execution runbook: `docs/MISSION-CONTROL-ONLINE-RUNBOOK.md`
+
+These files contain placeholders only. Real tokens/secrets belong in Keychain, Cloudflare/Coolify secrets, or the deployment secret store.
+
 ## Still blocked before public launch
 
 - Philip approval for DNS/public deploy.
