@@ -94,6 +94,7 @@ DATA_DIR=/data UPLOAD_DIR=/data/uploads ./scripts/restore.sh /data/backups/data_
 
 - Production env template: `.env.production.template`
 - Online execution runbook: `docs/MISSION-CONTROL-ONLINE-RUNBOOK.md`
+- Approval checklist: `docs/MISSION-CONTROL-APPROVAL-CHECKLIST.md`
 
 These files contain placeholders only. Real tokens/secrets belong in Keychain, Cloudflare/Coolify secrets, or the deployment secret store.
 

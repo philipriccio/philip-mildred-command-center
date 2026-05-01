@@ -455,3 +455,9 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Added `docs/MISSION-CONTROL-ONLINE-RUNBOOK.md` covering approval boundary, Coolify resource shape, Cloudflare Access shape, staging smoke, backup setup, rollback, and remaining PAT-rotation blocker.
 - Updated `docs/DEPLOYMENT-READINESS.md` to point at the runbook/template.
 - Still no public deploy, DNS change, tunnel, or gateway exposure.
+
+## Mission Control approval checklist — Apr 30, 2026
+- Added `docs/MISSION-CONTROL-APPROVAL-CHECKLIST.md`, a concise Philip-facing decision sheet for Mission Control online deployment.
+- Checklist recommends private Cloudflare Access-gated staging at `mission.companytheatre.ca`, read-mostly mode, high-risk actions disabled, persistent `/data`, daily backups, and GitHub PAT revocation before public-launch confidence.
+- Updated deployment readiness/runbook docs to point at the approval checklist.
+- Still no public deploy, DNS change, tunnel, or gateway exposure.

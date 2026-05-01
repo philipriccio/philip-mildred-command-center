@@ -2,6 +2,10 @@
 
 This is the execution runbook for making Mission Control available online. It is prep only until Philip explicitly approves deployment/DNS/public exposure.
 
+## Approval checklist
+
+Short Philip-facing approval sheet: `docs/MISSION-CONTROL-APPROVAL-CHECKLIST.md`
+
 ## Hard boundary
 
 Do **not** proceed past staging prep without Philip approval for:
