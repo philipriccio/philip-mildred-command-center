@@ -1,4 +1,4 @@
-import express, { type Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -18,8 +18,19 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 3001);
-const FRONTEND_ORIGINS = ['http://localhost:5173', 'http://localhost:3000'];
+const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS ?? 'http://localhost:5173,http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 const ENABLE_PUBLIC_DASHBOARD_TUNNEL = process.env.ENABLE_PUBLIC_DASHBOARD_TUNNEL === '1';
+const COMMAND_CENTER_AUTH_TOKEN = process.env.COMMAND_CENTER_AUTH_TOKEN ?? '';
+const COMMAND_CENTER_AUTH_EMAILS = (process.env.COMMAND_CENTER_AUTH_EMAILS ?? '')
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+const REQUIRE_AUTH = process.env.COMMAND_CENTER_REQUIRE_AUTH === '1' || Boolean(COMMAND_CENTER_AUTH_TOKEN) || COMMAND_CENTER_AUTH_EMAILS.length > 0;
+const DATA_DIR = process.env.DATA_DIR ?? path.join(__dirname);
+const UPLOAD_DIR = process.env.UPLOAD_DIR ?? path.join(__dirname, '..', 'uploads');
 const TASK_STATUSES = ['backlog', 'ready', 'in_progress', 'verification', 'complete'] as const;
 type TaskStatus = (typeof TASK_STATUSES)[number];
 type ApprovalDecision = 'approve' | 'request_changes' | 'send_back';
@@ -281,6 +292,44 @@ interface ProjectCronLinkRow {
   cron_job_id: string;
 }
 
+function isLocalRequest(req: Request) {
+  const host = req.hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+function extractAuthToken(req: Request) {
+  const header = req.get('authorization');
+  if (header?.startsWith('Bearer ')) return header.slice('Bearer '.length).trim();
+  return req.get('x-command-center-token')?.trim() ?? '';
+}
+
+function isAllowedAuthenticatedEmail(email: string | undefined) {
+  if (!email || COMMAND_CENTER_AUTH_EMAILS.length === 0) return false;
+  return COMMAND_CENTER_AUTH_EMAILS.includes(email.trim().toLowerCase());
+}
+
+function extractProxyAuthenticatedEmail(req: Request) {
+  return req.get('cf-access-authenticated-user-email')
+    ?? req.get('x-authentik-email')
+    ?? req.get('x-forwarded-email')
+    ?? undefined;
+}
+
+function isAuthorizedRequest(req: Request) {
+  if (!REQUIRE_AUTH) return true;
+  if (process.env.NODE_ENV !== 'production' && isLocalRequest(req)) return true;
+  if (Boolean(COMMAND_CENTER_AUTH_TOKEN) && extractAuthToken(req) === COMMAND_CENTER_AUTH_TOKEN) return true;
+  return isAllowedAuthenticatedEmail(extractProxyAuthenticatedEmail(req));
+}
+
+function requireAuth(req: Request, res: Response, next: () => void) {
+  if (isAuthorizedRequest(req)) {
+    next();
+    return;
+  }
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -305,6 +354,7 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: '250kb' }));
+app.use('/api', requireAuth);
 if (ENABLE_PUBLIC_DASHBOARD_TUNNEL) {
   const distPath = path.join(__dirname, '..', 'dist');
   app.use(express.static(distPath));
@@ -313,7 +363,7 @@ if (ENABLE_PUBLIC_DASHBOARD_TUNNEL) {
   });
 }
 
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+const uploadsDir = UPLOAD_DIR;
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -339,7 +389,11 @@ const upload = multer({
   },
 });
 
-const dbPath = path.join(__dirname, 'data.db');
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+const dbPath = path.join(DATA_DIR, 'data.db');
 const db = new Database(dbPath);
 
 db.pragma('foreign_keys = ON');
@@ -2134,7 +2188,25 @@ function broadcastUpdate(message: JsonObject | { type: string; data?: unknown })
   broadcastToTopics(['gateway', 'all'], message);
 }
 
-wss.on('connection', (ws) => {
+wss.on('connection', (ws, req) => {
+  const token = req.headers.authorization?.startsWith('Bearer ')
+    ? req.headers.authorization.slice('Bearer '.length).trim()
+    : Array.isArray(req.headers['x-command-center-token'])
+      ? req.headers['x-command-center-token'][0]
+      : req.headers['x-command-center-token'];
+  const proxyEmailHeader = req.headers['cf-access-authenticated-user-email']
+    ?? req.headers['x-authentik-email']
+    ?? req.headers['x-forwarded-email'];
+  const proxyEmail = Array.isArray(proxyEmailHeader) ? proxyEmailHeader[0] : proxyEmailHeader;
+  const isLocalWs = !REQUIRE_AUTH && process.env.NODE_ENV !== 'production';
+  const authorized = isLocalWs
+    || (Boolean(COMMAND_CENTER_AUTH_TOKEN) && token === COMMAND_CENTER_AUTH_TOKEN)
+    || isAllowedAuthenticatedEmail(proxyEmail);
+  if (!authorized) {
+    ws.close(1008, 'Unauthorized');
+    return;
+  }
+
   clientSubs.set(ws, new Set(['all']));
 
   const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
@@ -2406,6 +2478,10 @@ app.get('/api/inbox/:id/download', (req, res) => {
 server.listen(PORT, () => {
   console.log(`Command Center API running on port ${PORT}`);
   console.log(`Frontend origins: ${FRONTEND_ORIGINS.join(', ')}`);
+  console.log(`Auth: ${REQUIRE_AUTH ? 'required' : 'disabled/local-dev'}`);
+  console.log(`Allowed proxy emails: ${COMMAND_CENTER_AUTH_EMAILS.length}`);
+  console.log(`Data dir: ${DATA_DIR}`);
+  console.log(`Upload dir: ${UPLOAD_DIR}`);
   console.log(`GitHub: ${octokit ? 'enabled' : 'disabled'}`);
   console.log(`Gateway: ${gatewayToken ? 'token loaded, connecting...' : 'no token, skipping'}`);
   initGateway();

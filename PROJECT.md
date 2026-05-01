@@ -401,3 +401,17 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Command Hub now fetches protected-work data and passes it into the panel instead of static placeholders.
 - Smoke verified endpoint response locally with week `2026-04-27` and all six protected categories.
 - Verification: `npm run build` passed.
+
+## Mission Control online hardening — Apr 30, 2026
+- Philip wants Mission Control accessible from anywhere, likely via a Company Theatre subdomain, while keeping Telegram as the command surface.
+- Boundary: no public deploy, DNS change, tunnel, or gateway exposure until security is verified and Philip approves.
+- Security audit found the app was intentionally local-only and had no auth boundary on API/WebSocket endpoints, while exposing task/report/gateway-related capabilities.
+- Prep/hardening started:
+  - Git remote token removed from the repo origin URL; origin now uses plain GitHub HTTPS URL.
+  - Added env-driven `DATA_DIR` and `UPLOAD_DIR` so SQLite and uploads can live on a persistent production volume instead of being baked into the Docker image.
+  - Added production auth guard for `/api/*` and `/ws`, supporting bearer token via `COMMAND_CENTER_AUTH_TOKEN` and trusted reverse-proxy authenticated email headers via `COMMAND_CENTER_AUTH_EMAILS`.
+  - Local non-production requests still work without auth for development.
+  - Reworked Dockerfile toward production deployment: Node 22 slim, cache-aware npm install, built frontend served same-origin by Express, `/data` volume, no copied `server/data.db`.
+  - Added `.dockerignore` to keep local DB/uploads/env/artifacts out of image build context.
+- Secret-location policy: raw secrets stay in Keychain or deployment secrets; `/Users/mildred/.openclaw/workspace/SECRET-REGISTRY.md` records where to find them without storing raw values.
+- Recommended first online mode: `mission.companytheatre.ca` behind Cloudflare Access or equivalent auth; do not expose OpenClaw gateway port `18789` publicly.
