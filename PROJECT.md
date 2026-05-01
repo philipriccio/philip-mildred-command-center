@@ -429,3 +429,16 @@ Design implication: Mission Control should show lane-specific caution/authority 
   - high-risk `/api/gateway/send` returns 403 while disabled
   - gateway token absent, so gateway connection is skipped safely
 - Current state remains prep only: no public deploy, no DNS, no tunnel, no gateway exposure.
+
+## Mission Control public-boundary smoke tool — Apr 30, 2026
+- Added `scripts/smoke-public-boundary.mjs` and npm script `smoke:public-boundary` for repeatable staging/prod boundary checks.
+- The smoke requires `COMMAND_CENTER_SMOKE_URL` and either `COMMAND_CENTER_SMOKE_TOKEN` or `COMMAND_CENTER_SMOKE_EMAIL`.
+- Verified locally against production-mode server on port 3999 using the Keychain-stored auth token:
+  - unauthenticated `/api/health` returns 401
+  - authenticated `/api/health` returns 200
+  - authenticated high-risk `/api/gateway/send` returns 403 while disabled
+  - authenticated high-risk `/api/cron/run/:jobId` returns 403 while disabled
+  - authenticated high-risk `/api/selftape/diagnostics/access-token` returns 403 while disabled
+  - unauthenticated `/ws` is rejected with policy close 1008
+  - authenticated `/ws` opens
+- This is still local proof only. No public deploy, DNS change, tunnel, or gateway exposure has occurred.
