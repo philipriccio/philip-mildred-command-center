@@ -285,40 +285,155 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
 
             <Panel title={detail.cockpit?.title ?? `${detail.name} cockpit`} subtitle={detail.cockpit ? `${freshnessLabel(detail.cockpit.freshness)} · ${detail.cockpit.evidenceLabel}` : 'Live operating state for this project.'}>
               {detail.cockpit ? (
-                <div className="space-y-5">
-                  <div className="rounded-3xl border border-blue-400/30 bg-blue-500/10 p-5">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-xs uppercase tracking-[0.28em] text-blue-200">Current truth</p>
-                        <p className="mt-2 max-w-4xl text-sm leading-6 text-blue-50">{detail.cockpit.summary}</p>
-                      </div>
-                      <span className="rounded-full border border-blue-300/30 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-100">{freshnessLabel(detail.cockpit.freshness)}</span>
+                isSelfTape ? (
+                  <div className="space-y-5">
+                    <div className="rounded-3xl border border-sky-400/30 bg-sky-500/10 p-5">
+                      <p className="text-xs uppercase tracking-[0.28em] text-sky-200">Mission</p>
+                      <p className="mt-2 max-w-4xl text-xl font-semibold leading-8 text-sky-50">{detail.cockpit.mission}</p>
                     </div>
-                  </div>
 
-                  {detail.cockpit.warnings.length > 0 && (
-                    <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
-                      <p className="text-xs uppercase tracking-[0.24em] text-amber-200">Read before trusting this page</p>
-                      <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50">
-                        {detail.cockpit.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
-                      </ul>
-                    </div>
-                  )}
-
-                  <div className="grid gap-4 lg:grid-cols-2">
-                    {detail.cockpit.sections.map((section) => (
-                      <div key={section.title} className={`rounded-2xl border p-4 ${cockpitTone(section.status)}`}>
-                        <div className="flex items-start justify-between gap-3">
-                          <h3 className="font-semibold text-current">{section.title}</h3>
-                          <span className="rounded-full border border-current/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">{section.status}</span>
+                    {detail.cockpit.betaStatus && (
+                      <div className="rounded-3xl border border-rose-400/40 bg-rose-500/10 p-5">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.28em] text-rose-200">Beta readiness</p>
+                            <h3 className="mt-2 text-2xl font-bold text-rose-50">{detail.cockpit.betaStatus.label}</h3>
+                            <p className="mt-2 max-w-4xl text-sm leading-6 text-rose-50/90">{detail.cockpit.betaStatus.body}</p>
+                          </div>
+                          <span className="rounded-full border border-rose-300/30 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-rose-100">Blocked</span>
                         </div>
-                        <p className="mt-2 text-sm leading-6 text-current/90">{section.body}</p>
-                        {section.evidence && <p className="mt-3 rounded-xl border border-current/15 bg-black/10 px-3 py-2 text-xs leading-5 text-current/80"><span className="font-semibold">Evidence: </span>{section.evidence}</p>}
-                        {section.nextAction && <p className="mt-2 text-xs leading-5 text-current/75"><span className="font-semibold">Next: </span>{section.nextAction}</p>}
                       </div>
-                    ))}
+                    )}
+
+                    {detail.cockpit.warnings.length > 0 && (
+                      <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+                        <p className="text-xs uppercase tracking-[0.24em] text-amber-200">Plain-English rules</p>
+                        <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50">
+                          {detail.cockpit.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="mb-3 flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Current major blockers</p>
+                          <h3 className="mt-1 text-lg font-semibold text-slate-100">The three things stopping beta right now</h3>
+                        </div>
+                      </div>
+                      <div className="grid gap-4 xl:grid-cols-3">
+                        {(detail.cockpit.betaBlockers ?? []).map((blocker) => (
+                          <div key={blocker.id} className="rounded-3xl border border-slate-800 bg-slate-950/70 p-5">
+                            <div className="flex items-start justify-between gap-3">
+                              <h4 className="text-lg font-bold text-slate-50">{blocker.title}</h4>
+                              <span className="rounded-full border border-rose-400/30 bg-rose-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-rose-200">{blocker.status}</span>
+                            </div>
+                            <p className="mt-3 text-sm font-medium leading-6 text-slate-200">Goal: {blocker.goal}</p>
+                            <div className="mt-4 space-y-3 text-sm leading-6">
+                              <p className="text-slate-300"><span className="font-semibold text-slate-100">Current truth: </span>{blocker.currentTruth}</p>
+                              <p className="text-slate-400"><span className="font-semibold text-slate-200">Why it blocks beta: </span>{blocker.whyItBlocksBeta}</p>
+                              <p className="rounded-2xl border border-blue-400/20 bg-blue-500/10 p-3 text-blue-50"><span className="font-semibold">Next action: </span>{blocker.nextAction}</p>
+                              <p className="text-xs text-slate-500"><span className="font-semibold text-slate-400">Proof level: </span>{blocker.proofLevel}</p>
+                            </div>
+                            {blocker.reports.length > 0 && (
+                              <div className="mt-4 border-t border-slate-800 pt-3">
+                                <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Reports</p>
+                                <div className="mt-2 space-y-2">
+                                  {blocker.reports.map((report) => (
+                                    <div key={`${blocker.id}-${report.label}`} className="rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2">
+                                      <p className="text-sm font-medium text-slate-200">{report.label}</p>
+                                      <p className="mt-1 text-xs leading-5 text-slate-500">{report.note}{report.path ? ` · ${report.path}` : ''}</p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+                      <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-5">
+                        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Other app areas</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">These still matter, but they are not the current top beta blockers.</p>
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                          {(detail.cockpit.secondaryAreas ?? []).map((area) => (
+                            <div key={area.title} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="text-sm font-medium text-slate-100">{area.title}</p>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase tracking-wide ${area.status === 'ok' ? 'border-emerald-400/30 text-emerald-200' : area.status === 'needs_work' ? 'border-amber-400/30 text-amber-200' : 'border-slate-700 text-slate-400'}`}>{area.status.replace('_', ' ')}</span>
+                              </div>
+                              <p className="mt-1 text-xs leading-5 text-slate-500">{area.note}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-5">
+                        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Reports / history</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-300">Plain-English trail of what we tried, what failed, what worked, and what not to repeat.</p>
+                        <div className="mt-4 space-y-2">
+                          {(detail.cockpit.reports ?? []).map((report) => (
+                            <div key={report.label} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-3">
+                              <p className="text-sm font-medium text-slate-100">{report.label}</p>
+                              <p className="mt-1 text-xs leading-5 text-slate-500">{report.note}{report.path ? ` · ${report.path}` : ''}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    <details className="rounded-3xl border border-slate-800 bg-slate-950/40 p-5">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-200">Technical source / freshness details</summary>
+                      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                        {detail.cockpit.sections.map((section) => (
+                          <div key={section.title} className={`rounded-2xl border p-4 ${cockpitTone(section.status)}`}>
+                            <h3 className="font-semibold text-current">{section.title}</h3>
+                            <p className="mt-2 text-sm leading-6 text-current/90">{section.body}</p>
+                            {section.evidence && <p className="mt-3 rounded-xl border border-current/15 bg-black/10 px-3 py-2 text-xs leading-5 text-current/80"><span className="font-semibold">Evidence: </span>{section.evidence}</p>}
+                            {section.nextAction && <p className="mt-2 text-xs leading-5 text-current/75"><span className="font-semibold">Next: </span>{section.nextAction}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </details>
                   </div>
-                </div>
+                ) : (
+                  <div className="space-y-5">
+                    <div className="rounded-3xl border border-blue-400/30 bg-blue-500/10 p-5">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.28em] text-blue-200">Current truth</p>
+                          <p className="mt-2 max-w-4xl text-sm leading-6 text-blue-50">{detail.cockpit.summary}</p>
+                        </div>
+                        <span className="rounded-full border border-blue-300/30 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-100">{freshnessLabel(detail.cockpit.freshness)}</span>
+                      </div>
+                    </div>
+
+                    {detail.cockpit.warnings.length > 0 && (
+                      <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+                        <p className="text-xs uppercase tracking-[0.24em] text-amber-200">Read before trusting this page</p>
+                        <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50">
+                          {detail.cockpit.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      {detail.cockpit.sections.map((section) => (
+                        <div key={section.title} className={`rounded-2xl border p-4 ${cockpitTone(section.status)}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <h3 className="font-semibold text-current">{section.title}</h3>
+                            <span className="rounded-full border border-current/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">{section.status}</span>
+                          </div>
+                          <p className="mt-2 text-sm leading-6 text-current/90">{section.body}</p>
+                          {section.evidence && <p className="mt-3 rounded-xl border border-current/15 bg-black/10 px-3 py-2 text-xs leading-5 text-current/80"><span className="font-semibold">Evidence: </span>{section.evidence}</p>}
+                          {section.nextAction && <p className="mt-2 text-xs leading-5 text-current/75"><span className="font-semibold">Next: </span>{section.nextAction}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
               ) : <EmptyState message="No live cockpit has been configured for this project yet." />}
             </Panel>
 

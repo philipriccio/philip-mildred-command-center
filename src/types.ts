@@ -347,6 +347,26 @@ export interface CronJob {
 }
 
 
+export interface ProjectCockpitSection {
+  title: string;
+  status: 'green' | 'yellow' | 'red' | 'slate';
+  body: string;
+  evidence?: string;
+  nextAction?: string;
+}
+
+export interface SelfTapeBlocker {
+  id: string;
+  title: string;
+  goal: string;
+  currentTruth: string;
+  whyItBlocksBeta: string;
+  nextAction: string;
+  status: 'blocked' | 'in_progress' | 'waiting' | 'watching';
+  proofLevel: string;
+  reports: Array<{ label: string; path?: string; note: string }>;
+}
+
 export interface ProjectCockpit {
   type: 'selftape' | 'generic';
   freshness: 'live' | 'mixed' | 'static' | 'unavailable';
@@ -355,13 +375,19 @@ export interface ProjectCockpit {
   summary: string;
   evidenceLabel: string;
   warnings: string[];
-  sections: Array<{
-    title: string;
-    status: 'green' | 'yellow' | 'red' | 'slate';
+  mission?: string;
+  betaStatus?: {
+    label: string;
     body: string;
-    evidence?: string;
-    nextAction?: string;
+  };
+  betaBlockers?: SelfTapeBlocker[];
+  secondaryAreas?: Array<{
+    title: string;
+    status: 'ok' | 'needs_work' | 'unknown';
+    note: string;
   }>;
+  reports?: Array<{ label: string; path?: string; note: string }>;
+  sections: ProjectCockpitSection[];
   links?: Array<{ label: string; href: string }>;
 }
 

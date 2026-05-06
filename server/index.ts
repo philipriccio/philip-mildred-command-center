@@ -818,6 +818,23 @@ function getWorkItemOr404(res: Response, id: string) {
   return workItem;
 }
 
+function readProjectDetail(id: string) {
+  const project = selectProjectById.get(id);
+  if (!project) return null;
+  const work_items = db.prepare<WorkItemRow>('SELECT * FROM work_items WHERE project_id = ? ORDER BY priority ASC, updated_at DESC').all(id);
+  const cron_job_ids = db.prepare<{ cron_job_id: string }>('SELECT cron_job_id FROM project_cron_links WHERE project_id = ? ORDER BY cron_job_id ASC').all(id).map((row) => row.cron_job_id);
+  const cockpit = project.id === 'selftape'
+    ? buildSelfTapeCockpit(project, work_items)
+    : buildGenericCockpit(project, work_items);
+  return {
+    ...project,
+    work_items,
+    cron_job_ids,
+    cron_jobs: [],
+    cockpit,
+  };
+}
+
 
 function readRecentCommits(cwd: string, limit = 5) {
   const output = safeExec('git', ['log', `-${limit}`, '--pretty=format:%h%x09%ct%x09%s'], cwd);
@@ -907,21 +924,83 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   const recentCommits = readRecentCommits(sourcePath, 5);
   const buildLogTouched = readLastTouched(buildLogPath);
   const projectTouched = readLastTouched(projectPath);
-  const blockedItems = workItems.filter((item) => item.status === 'blocked');
   const activeItems = workItems.filter((item) => item.status === 'in_progress' || item.status === 'todo');
   const warnings = [
-    'Build 297/300 device truth overrides app logs: do not infer iPhone audibility or clean capture from scheduling evidence.',
-    'Artifact Proof ZIP/export path is diagnostic only; it does not prove Record Audition readiness.',
+    'This page is written for beta readiness, not engineering pride. Device truth beats app logs.',
+    'The three blockers below are not the whole app; they are the current reasons Self-e-Tape is not beta-ready.',
     dirty ? 'SelfTape repo is dirty — no build or release action can be treated as clean.' : null,
   ].filter(Boolean) as string[];
+
   return {
     type: 'selftape' as const,
     freshness: 'live' as const,
     title: 'Self-e-Tape cockpit',
     updatedAt: Date.now(),
-    summary: `Live repo ${branch ?? 'unknown'} @ ${head ?? 'unknown'}, build ${buildNumber ?? 'unknown'}. Current RCA focus: Artifact Proof phase diagnostics and AudioEngine playback/capture boundary.`,
-    evidenceLabel: 'Live repo, BUILD-LOG, PROJECT.md, Mission Control work items',
+    summary: 'Self-e-Tape is not beta-ready yet. The current work is to remove the three big blockers: parser trust, AI reader reliability/timing, and final sound/export quality.',
+    evidenceLabel: 'Plain-English beta blockers backed by live repo, BUILD-LOG, and PROJECT.md',
+    mission: 'Help actors create a professional self-tape on their phone without needing another person to read with them.',
+    betaStatus: {
+      label: 'Not beta-ready',
+      body: 'The app can prove pieces of the workflow, but actors cannot trust it yet because the script import, AI reader timing/reliability, and final exported sound are not good enough.',
+    },
     warnings,
+    betaBlockers: [
+      {
+        id: 'parser',
+        title: 'Sides Parser',
+        goal: 'Sides import cleanly enough that actors trust the script.',
+        currentTruth: 'Not good enough yet. Real audition sides still produce missing, merged, or contaminated lines, so an actor could rehearse or record from the wrong text.',
+        whyItBlocksBeta: 'If the script is wrong, the product breaks before recording starts.',
+        nextAction: 'Build a parser truth set from real sides and track every failure as pass/fail examples, not vague parser confidence.',
+        status: 'blocked' as const,
+        proofLevel: 'Known product blocker; needs parser fixture proof on messy real sides.',
+        reports: [
+          { label: 'Parser history', path: 'BUILD-LOG.md', note: 'Contains prior William/Oleson and stage-direction contamination findings.' },
+          { label: 'Project truth', path: 'PROJECT.md', note: 'Current parser risks and release boundary.' },
+        ],
+      },
+      {
+        id: 'ai-reader',
+        title: 'AI Reader',
+        goal: 'Voice plays reliably, timing feels natural, does not cut off the actor, and does not leave dead air.',
+        currentTruth: 'Still not reliable. Build 300 Artifact Proof preserved a clean reader file, but Philip did not hear the AI voice in that proof path. Scheduling evidence is not the same as heard audio.',
+        whyItBlocksBeta: 'The whole promise is a dependable reader. If the reader misses, lags, cuts off, or feels unnatural, actors cannot use it.',
+        nextAction: 'Split proof into playback-only, capture-only, playback+during-capture, and route/session evidence so we know exactly where the reader fails.',
+        status: 'blocked' as const,
+        proofLevel: 'Device truth required; source/log proof alone is insufficient.',
+        reports: [
+          { label: 'Build 300 ZIP proof', path: 'BUILD-LOG.md', note: 'ZIP export worked; AI audibility did not.' },
+          { label: 'Artifact proof phase diagnostics', path: 'PROJECT.md', note: 'Current source plan for separating playback from capture.' },
+        ],
+      },
+      {
+        id: 'sound-export',
+        title: 'Final Sound / Export',
+        goal: 'Final takes sound amazing: clean actor, usable reader, no static, bleed, harshness, or weird gaps.',
+        currentTruth: 'Horrendous right now. Build 297 exported media confirmed Philip’s report: actor was buried/static-like and the output was not usable.',
+        whyItBlocksBeta: 'A self-tape app lives or dies on final submitted media. If the export sounds bad, nothing else matters.',
+        nextAction: 'Fix the first failing audio layer before tuning final mix: direct AudioEngine capture must be clean before merge/export can be trusted.',
+        status: 'blocked' as const,
+        proofLevel: 'Received device artifacts proved failure; next proof must isolate the bad layer.',
+        reports: [
+          { label: 'Build 297 media RCA', path: 'BUILD-LOG.md', note: 'Confirmed static/actor-burial failure from exported media.' },
+          { label: 'Build 300 artifact gates', path: 'artifacts/record-audition-audio-gates/latest/', note: 'Verifier and received ZIP analysis live under artifact gates.' },
+        ],
+      },
+    ],
+    secondaryAreas: [
+      { title: 'Project setup / import flow', status: 'needs_work' as const, note: 'Important, but not the current top blocker.' },
+      { title: 'Script review and editing', status: 'needs_work' as const, note: 'Depends heavily on parser trust.' },
+      { title: 'Voice selection', status: 'needs_work' as const, note: 'Usable only after reader reliability is proven.' },
+      { title: 'Rehearsal mode', status: 'unknown' as const, note: 'Should share the same reader/timing foundation as Record Audition.' },
+      { title: 'Review takes / PostTake', status: 'needs_work' as const, note: 'Cannot be trusted until processed media is good.' },
+      { title: 'Save/share/export UX', status: 'needs_work' as const, note: 'Needs deterministic, visible export proof; Build 299 exposed email handoff risk.' },
+    ],
+    reports: [
+      { label: 'BUILD-LOG.md', path: 'BUILD-LOG.md', note: 'Chronological build/device/proof history.' },
+      { label: 'PROJECT.md', path: 'PROJECT.md', note: 'Current source truth, decisions, and release boundaries.' },
+      { label: 'Artifact gates', path: 'artifacts/record-audition-audio-gates/latest/', note: 'Proof ZIPs, verifier reports, and audio metrics.' },
+    ],
     sections: [
       {
         title: 'Current source edge',
@@ -931,280 +1010,29 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         nextAction: 'Keep source work local until a narrow build is explicitly approved.',
       },
       {
-        title: 'Latest build/proof edge',
+        title: 'Latest proof edge',
         status: 'red' as const,
-        body: latestAttempt ? `Latest parsed build log item: Build ${latestAttempt.build} — ${latestAttempt.status}. Build 300 proved ZIP receipt/verification but not audio; Philip heard no AI in Artifact Proof.` : 'No current build attempt parsed from BUILD-LOG.',
+        body: latestAttempt ? `Latest build log item: Build ${latestAttempt.build} — ${latestAttempt.status}. Build 300 proved ZIP receipt/verification, but not audio quality or AI audibility.` : 'No current build attempt parsed from BUILD-LOG.',
         evidence: buildLogSummary.artifactProofSignals.join(' · ') || buildLogSummary.latestBuild?.title,
-        nextAction: 'Use phase-split proof evidence to isolate playback-only vs capture-only vs playback+during-capture on a future approved proof.',
+        nextAction: 'Use phase-split proof evidence before any further device ask.',
       },
       {
-        title: 'Device truth boundary',
-        status: 'red' as const,
-        body: 'Do not claim Record Audition, iPhone speaker audibility, AEC, actor capture, PostTake, save/export, beta, or release readiness from local/source evidence.',
-        evidence: 'Philip device reports remain authoritative over diagnostics.',
-      },
-      {
-        title: 'Tracked work items',
+        title: 'Hidden stale database tasks',
         status: 'yellow' as const,
-        body: 'Legacy manually-entered work items are hidden from the Self-e-Tape cockpit because they include stale Build 93-era tasks and are not current truth.',
-        evidence: activeItems.length > 0 ? `${activeItems.length} legacy database item${activeItems.length === 1 ? '' : 's'} suppressed from cockpit display.` : 'No current work packets yet.',
-        nextAction: 'Next pass: auto-create/update project work packets from Mildred actions, agent sessions, cron runs, and build/proof events.',
+        body: 'Old manually-entered Build 93-era tasks are hidden because they are stale and misleading.',
+        evidence: activeItems.length > 0 ? `${activeItems.length} legacy database item${activeItems.length === 1 ? '' : 's'} suppressed from cockpit display.` : 'No legacy task noise currently present.',
+        nextAction: 'Replace manual stale tasks with generated work packets from Telegram, agent sessions, build/proof events, and reports.',
       },
       {
         title: 'Freshness',
         status: 'green' as const,
         body: `Checked live now. BUILD-LOG touched ${buildLogTouched ? new Date(buildLogTouched).toLocaleString() : 'unknown'}; PROJECT.md touched ${projectTouched ? new Date(projectTouched).toLocaleString() : 'unknown'}.`,
-        evidence: 'This replaces the old hardcoded Build 279 Ops panel.',
+        evidence: 'Live repo/docs check, not old hardcoded Ops copy.',
       },
     ],
     links: [project.repo_url ? { label: 'Repo', href: project.repo_url } : null, project.live_url ? { label: 'Live site', href: project.live_url } : null].filter(Boolean),
   };
 }
-
-async function readProjectDetail(id: string) {
-  const project = selectProjectById.get(id);
-  if (!project) return null;
-  const work_items = db.prepare<WorkItemRow>('SELECT * FROM work_items WHERE project_id = ? ORDER BY priority ASC, updated_at DESC').all(id);
-  const cron_job_ids = db.prepare<ProjectCronLinkRow>('SELECT * FROM project_cron_links WHERE project_id = ? ORDER BY cron_job_id').all(id).map((row) => row.cron_job_id);
-
-  let cron_jobs: unknown[] = [];
-  if (cron_job_ids.length > 0 && gateway?.isConnected()) {
-    try {
-      const data = await gateway.request('cron.list', { includeDisabled: true }) as { jobs?: Array<{ id: string }> };
-      cron_jobs = (data.jobs ?? []).filter((job) => cron_job_ids.includes(job.id));
-    } catch (error) {
-      console.warn('[Projects] Failed to fetch linked cron jobs', error);
-    }
-  }
-
-  const cockpit = project.id === 'selftape'
-    ? buildSelfTapeCockpit(project, work_items)
-    : buildGenericCockpit(project, work_items);
-
-  return {
-    ...project,
-    work_items,
-    cron_job_ids,
-    cron_jobs,
-    cockpit,
-  };
-}
-
-function getTaskOr404(res: Response, id: string) {
-  const task = selectTaskById.get(id);
-  if (!task) {
-    res.status(404).json({ error: 'Task not found' });
-    return null;
-  }
-  return task;
-}
-
-function readTaskDetail(id: string) {
-  const task = selectTaskById.get(id);
-  if (!task) return null;
-  return {
-    ...task,
-    agent: task.agent_id ? selectAgentById.get(task.agent_id) ?? null : null,
-    lane: task.lane_id ? selectLaneById.get(task.lane_id) ?? null : null,
-    evidence: selectEvidenceByTask.all(id),
-    approvals: selectApprovalsByTask.all(id),
-    prs: selectPrsByTask.all(id),
-    office_report: selectLatestOfficeReportByTaskId.get(id) ?? null,
-    history: selectEventsByTask.all(id).map(event => ({
-      ...event,
-      details: parseJson<JsonObject>(event.details_json),
-    })),
-  };
-}
-
-function syncAgentCurrentTask(agentId: string | null, taskId: string | null) {
-  if (!agentId) return;
-  db.prepare('UPDATE agents SET current_task_id = ? WHERE id = ?').run(taskId, agentId);
-}
-
-function deriveOfficeState(task: TaskRow | null) {
-  if (!task || task.status === 'complete') {
-    return { officeState: 'inactive', taskProgress: 0, taskTitle: null as string | null };
-  }
-  if (task.blocker_reason) {
-    return { officeState: 'blocked', taskProgress: Math.max(task.status === 'verification' ? 85 : 45, 20), taskTitle: task.title };
-  }
-  if (task.status === 'verification') {
-    return { officeState: 'working', taskProgress: 90, taskTitle: task.title };
-  }
-  if (task.status === 'in_progress') {
-    return { officeState: 'working', taskProgress: 60, taskTitle: task.title };
-  }
-  if (task.status === 'ready') {
-    return { officeState: 'reserved', taskProgress: 20, taskTitle: task.title };
-  }
-  return { officeState: 'inactive', taskProgress: 0, taskTitle: null as string | null };
-}
-
-function syncOfficeAgentForTask(task: TaskRow) {
-  if (!task.agent_id) return;
-  const officeAgent = selectOfficeAgentById.get(task.agent_id);
-  if (!officeAgent) return;
-  const live = liveAgentActivity.get(task.agent_id);
-  const liveIsFresh = live ? Date.now() - live.lastSeen < LIVE_AGENT_ACTIVITY_TTL_MS : false;
-  const derived = deriveOfficeState(task);
-  const officeState = liveIsFresh ? live!.officeState : derived.officeState;
-  const taskTitle = liveIsFresh ? live!.taskLabel : derived.taskTitle;
-  const taskProgress = liveIsFresh ? Math.max(derived.taskProgress, 65) : derived.taskProgress;
-  db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
-    .run(officeState, taskTitle, taskProgress, task.agent_id);
-  broadcastToTopics(['office', 'all'], {
-    type: 'agent.state',
-    agentId: task.agent_id,
-    state: officeState,
-    task: taskTitle,
-    progress: taskProgress,
-  });
-}
-
-function upsertOfficeReport(task: TaskRow, options?: { forceApproved?: boolean; reviewedBy?: string | null; approvedBy?: string | null }) {
-  if (!task.agent_id) return null;
-  const officeAgent = selectOfficeAgentById.get(task.agent_id);
-  if (!officeAgent) return null;
-  const lane = task.lane_id ? selectLaneById.get(task.lane_id) : null;
-  const existing = selectLatestOfficeReportByTaskId.get(task.id);
-  const now = Date.now();
-  const autoApproved = task.agent_id === 'main' || Boolean(options?.forceApproved);
-  const reviewStatus = autoApproved ? 'approved' : 'pending';
-  const reviewedBy = autoApproved ? (options?.reviewedBy ?? 'Mildred') : null;
-  const approvedBy = autoApproved ? (options?.approvedBy ?? 'Mildred') : null;
-
-  if (existing) {
-    db.prepare(`
-      UPDATE office_reports
-      SET agent_id = ?,
-          agent_name = ?,
-          task_title = ?,
-          summary = ?,
-          lane_name = ?,
-          model_used = ?,
-          completed_at = ?,
-          review_status = CASE WHEN ? = 1 THEN 'approved' ELSE COALESCE(review_status, 'pending') END,
-          reviewed_by = CASE WHEN ? = 1 THEN ? ELSE reviewed_by END,
-          reviewed_at = CASE WHEN ? = 1 THEN ? ELSE reviewed_at END,
-          approved_by = CASE WHEN ? = 1 THEN ? ELSE approved_by END,
-          approved_at = CASE WHEN ? = 1 THEN ? ELSE approved_at END
-      WHERE id = ?
-    `).run(
-      task.agent_id, officeAgent.name, task.title, task.completion_summary || task.delivery_notes || task.request_summary || null,
-      lane?.name ?? null, task.model_used ?? null, now,
-      autoApproved ? 1 : 0, autoApproved ? 1 : 0, reviewedBy, autoApproved ? 1 : 0, now, autoApproved ? 1 : 0, approvedBy, autoApproved ? 1 : 0, now, existing.id,
-    );
-    return db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(existing.id) ?? null;
-  }
-
-  const reportId = createId('report');
-  db.prepare(`
-    INSERT INTO office_reports (
-      id, task_id, agent_id, agent_name, task_title, summary, lane_name, model_used,
-      completed_at, acknowledged, review_status, reviewed_by, reviewed_at, approved_by, approved_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
-  `).run(
-    reportId, task.id, task.agent_id, officeAgent.name, task.title,
-    task.completion_summary || task.delivery_notes || task.request_summary || null,
-    lane?.name ?? null, task.model_used ?? null, now, reviewStatus, reviewedBy, reviewedBy ? now : null, approvedBy, approvedBy ? now : null,
-  );
-  const report = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(reportId) ?? null;
-  broadcastToTopics(['office', 'all'], { type: 'report.new', report });
-  return report;
-}
-
-function recordTaskEvent(taskId: string, eventType: string, actor: string, summary: string, details?: JsonObject) {
-  const event = {
-    id: createId('evt'),
-    task_id: taskId,
-    event_type: eventType,
-    actor,
-    summary,
-    details_json: details ? JSON.stringify(details) : null,
-    created_at: Date.now(),
-  };
-  db.prepare(`
-    INSERT INTO task_events (id, task_id, event_type, actor, summary, details_json, created_at)
-    VALUES (@id, @task_id, @event_type, @actor, @summary, @details_json, @created_at)
-  `).run(event);
-  broadcastUpdate({
-    type: 'task_event',
-    data: {
-      ...event,
-      details: details ?? null,
-    },
-  });
-}
-
-function broadcastTask(type: string, taskId: string) {
-  const detail = readTaskDetail(taskId);
-  if (detail) {
-    broadcastUpdate({ type, data: detail });
-  }
-}
-
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: Date.now(), frontendOrigins: FRONTEND_ORIGINS });
-});
-
-app.get('/api/agents', (_req, res) => {
-  const agents = db.prepare<AgentRow>('SELECT * FROM agents ORDER BY name').all();
-  res.json(agents);
-});
-
-app.get('/api/tasks', (_req, res) => {
-  const tasks = db.prepare(`
-    SELECT t.*, a.name AS agent_name, l.name AS lane_name, l.color AS lane_color
-    FROM tasks t
-    LEFT JOIN agents a ON a.id = t.agent_id
-    LEFT JOIN lanes l ON l.id = t.lane_id
-    ORDER BY CASE t.status
-      WHEN 'in_progress' THEN 1
-      WHEN 'verification' THEN 2
-      WHEN 'ready' THEN 3
-      WHEN 'backlog' THEN 4
-      WHEN 'complete' THEN 5
-      ELSE 6
-    END, t.updated_at DESC
-  `).all();
-  res.json(tasks);
-});
-
-app.get('/api/tasks/:id', (req, res) => {
-  const task = readTaskDetail(req.params.id);
-  if (!task) {
-    res.status(404).json({ error: 'Task not found' });
-    return;
-  }
-  res.json(task);
-});
-
-app.get('/api/status', (_req, res) => {
-  const status = db.prepare('SELECT * FROM status WHERE id = 1').get();
-  res.json(status);
-});
-
-app.get('/api/projects', (_req, res) => {
-  const projects = db.prepare(`
-    SELECT p.*,
-      COALESCE(SUM(CASE WHEN wi.status != 'done' THEN 1 ELSE 0 END), 0) AS open_work_items_count,
-      COUNT(wi.id) AS work_items_count
-    FROM projects p
-    LEFT JOIN work_items wi ON wi.project_id = p.id
-    GROUP BY p.id
-    ORDER BY
-      CASE p.id
-        WHEN 'selftape' THEN 0
-        WHEN 'command-center' THEN 1
-        WHEN 'hawco-crm' THEN 2
-        WHEN 'coverageiq' THEN 3
-        ELSE 50
-      END,
-      p.name
-  `).all();
-  res.json(projects);
-});
 
 app.get('/api/projects/:id', async (req, res) => {
   const project = await readProjectDetail(req.params.id);
