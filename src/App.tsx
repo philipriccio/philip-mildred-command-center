@@ -40,7 +40,14 @@ import {
   type ViewMode,
 } from './types';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3001');
+function defaultApiBase() {
+  if (typeof window === 'undefined') return 'http://localhost:3001';
+  const { hostname } = window.location;
+  if (hostname === '127.0.0.1' || hostname === 'localhost') return 'http://127.0.0.1:3001';
+  return window.location.origin;
+}
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? defaultApiBase();
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
 function App() {
