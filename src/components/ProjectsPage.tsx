@@ -171,13 +171,13 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
     return groups;
   }, [visibleWorkItems]);
 
+  const isSelfTape = detail?.id === 'selftape';
+  const visibleWorkItems = useMemo(() => (isSelfTape ? [] : (detail?.work_items ?? [])), [detail?.work_items, isSelfTape]);
+
   const availableCronJobs = useMemo(() => {
     const linked = new Set(detail?.cron_job_ids ?? []);
     return cronJobs.filter((job) => !linked.has(job.id));
   }, [cronJobs, detail]);
-
-  const isSelfTape = detail?.id === 'selftape';
-  const visibleWorkItems = isSelfTape ? [] : (detail?.work_items ?? []);
 
   const startEdit = (item: WorkItem) => {
     setEditingId(item.id);
