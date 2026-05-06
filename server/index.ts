@@ -1193,7 +1193,15 @@ app.get('/api/projects', (_req, res) => {
     FROM projects p
     LEFT JOIN work_items wi ON wi.project_id = p.id
     GROUP BY p.id
-    ORDER BY p.name
+    ORDER BY
+      CASE p.id
+        WHEN 'selftape' THEN 0
+        WHEN 'command-center' THEN 1
+        WHEN 'hawco-crm' THEN 2
+        WHEN 'coverageiq' THEN 3
+        ELSE 50
+      END,
+      p.name
   `).all();
   res.json(projects);
 });
