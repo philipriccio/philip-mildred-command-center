@@ -818,6 +818,149 @@ function getWorkItemOr404(res: Response, id: string) {
   return workItem;
 }
 
+
+function readRecentCommits(cwd: string, limit = 5) {
+  const output = safeExec('git', ['log', `-${limit}`, '--pretty=format:%h%x09%ct%x09%s'], cwd);
+  if (!output) return [];
+  return output.split('\n').filter(Boolean).map((line) => {
+    const [sha, timestamp, ...messageParts] = line.split('\t');
+    return { sha, timestamp: Number(timestamp) * 1000, message: messageParts.join('\t') };
+  });
+}
+
+function readLastTouched(filePath: string) {
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+function summarizeSelfTapeBuildLog(buildLogPath: string) {
+  try {
+    const text = fs.readFileSync(buildLogPath, 'utf8');
+    const latestBuild = Array.from(text.matchAll(/## Build (\d+) — ([^\n]+)\n([\s\S]*?)(?=\n## Build |\n### |$)/g)).at(-1);
+    const latestArtifactProof = Array.from(text.matchAll(/Artifact Proof[^\n]*— May 6, 2026|Build 300[^\n]*/gi)).slice(-4).map((match) => match[0]);
+    return {
+      latestBuild: latestBuild ? { build: latestBuild[1], title: latestBuild[2].trim() } : null,
+      artifactProofSignals: latestArtifactProof,
+    };
+  } catch {
+    return { latestBuild: null, artifactProofSignals: [] as string[] };
+  }
+}
+
+function buildGenericCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
+  const openItems = workItems.filter((item) => item.status !== 'done');
+  const blockedItems = openItems.filter((item) => item.status === 'blocked');
+  const inProgress = openItems.filter((item) => item.status === 'in_progress');
+  const repoState = project.local_path ? {
+    branch: safeExec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], project.local_path),
+    head: safeExec('git', ['rev-parse', '--short', 'HEAD'], project.local_path),
+    dirty: Boolean(safeExec('git', ['status', '--short'], project.local_path)?.trim()),
+    recentCommits: readRecentCommits(project.local_path, 3),
+  } : null;
+  const freshness = repoState ? 'live' : 'mixed';
+  return {
+    type: 'generic' as const,
+    freshness,
+    title: `${project.name} cockpit`,
+    updatedAt: Date.now(),
+    summary: openItems.length > 0
+      ? `${openItems.length} open work item${openItems.length === 1 ? '' : 's'} tracked here. ${blockedItems.length} blocked.`
+      : 'No open work items are tracked in this project cockpit yet.',
+    evidenceLabel: repoState ? 'Live repo + Mission Control work items' : 'Mission Control work items only',
+    warnings: repoState?.dirty ? ['Repository has uncommitted changes; do not treat build/deploy state as clean.'] : [],
+    sections: [
+      {
+        title: 'Live source state',
+        status: repoState?.dirty ? 'yellow' as const : repoState ? 'green' as const : 'slate' as const,
+        body: repoState ? `${repoState.branch ?? 'unknown'} @ ${repoState.head ?? 'unknown'}${repoState.dirty ? ' with local changes' : ' clean'}` : 'No local repo path is configured for live source checks.',
+        evidence: repoState?.recentCommits?.[0] ? `Latest commit: ${repoState.recentCommits[0].sha} — ${repoState.recentCommits[0].message}` : undefined,
+      },
+      {
+        title: 'Active work',
+        status: inProgress.length > 0 ? 'yellow' as const : 'slate' as const,
+        body: inProgress.length > 0 ? inProgress.map((item) => item.title).join('; ') : 'No in-progress work items are tracked here.',
+      },
+      {
+        title: 'Blocked / waiting',
+        status: blockedItems.length > 0 ? 'red' as const : 'green' as const,
+        body: blockedItems.length > 0 ? blockedItems.map((item) => `${item.title}${item.blocker_reason ? ` — ${item.blocker_reason}` : ''}`).join('; ') : 'No tracked blockers.',
+      },
+    ],
+    links: [project.repo_url ? { label: 'Repo', href: project.repo_url } : null, project.live_url ? { label: 'Live site', href: project.live_url } : null].filter(Boolean),
+  };
+}
+
+function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
+  const sourcePath = project.local_path ?? '/Users/mildred/.openclaw/workspace/projects/SelfTapeApp';
+  const branch = safeExec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], sourcePath);
+  const head = safeExec('git', ['rev-parse', '--short', 'HEAD'], sourcePath);
+  const dirty = Boolean(safeExec('git', ['status', '--short'], sourcePath)?.trim());
+  const buildNumber = readBuildNumber(path.join(sourcePath, 'app.json'));
+  const buildLogPath = path.join(sourcePath, 'BUILD-LOG.md');
+  const projectPath = path.join(sourcePath, 'PROJECT.md');
+  const buildAttempts = readBuildAttempts(buildLogPath);
+  const buildLogSummary = summarizeSelfTapeBuildLog(buildLogPath);
+  const latestAttempt = buildAttempts.at(-1);
+  const recentCommits = readRecentCommits(sourcePath, 5);
+  const buildLogTouched = readLastTouched(buildLogPath);
+  const projectTouched = readLastTouched(projectPath);
+  const blockedItems = workItems.filter((item) => item.status === 'blocked');
+  const activeItems = workItems.filter((item) => item.status === 'in_progress' || item.status === 'todo');
+  const warnings = [
+    'Build 297/300 device truth overrides app logs: do not infer iPhone audibility or clean capture from scheduling evidence.',
+    'Artifact Proof ZIP/export path is diagnostic only; it does not prove Record Audition readiness.',
+    dirty ? 'SelfTape repo is dirty — no build or release action can be treated as clean.' : null,
+  ].filter(Boolean) as string[];
+  return {
+    type: 'selftape' as const,
+    freshness: 'live' as const,
+    title: 'Self-e-Tape cockpit',
+    updatedAt: Date.now(),
+    summary: `Live repo ${branch ?? 'unknown'} @ ${head ?? 'unknown'}, build ${buildNumber ?? 'unknown'}. Current RCA focus: Artifact Proof phase diagnostics and AudioEngine playback/capture boundary.`,
+    evidenceLabel: 'Live repo, BUILD-LOG, PROJECT.md, Mission Control work items',
+    warnings,
+    sections: [
+      {
+        title: 'Current source edge',
+        status: dirty ? 'yellow' as const : 'green' as const,
+        body: `${branch ?? 'unknown'} @ ${head ?? 'unknown'} · build ${buildNumber ?? 'unknown'} · ${dirty ? 'dirty' : 'clean'}`,
+        evidence: recentCommits[0] ? `${recentCommits[0].sha} — ${recentCommits[0].message}` : undefined,
+        nextAction: 'Keep source work local until a narrow build is explicitly approved.',
+      },
+      {
+        title: 'Latest build/proof edge',
+        status: 'red' as const,
+        body: latestAttempt ? `Latest parsed build log item: Build ${latestAttempt.build} — ${latestAttempt.status}. Build 300 proved ZIP receipt/verification but not audio; Philip heard no AI in Artifact Proof.` : 'No current build attempt parsed from BUILD-LOG.',
+        evidence: buildLogSummary.artifactProofSignals.join(' · ') || buildLogSummary.latestBuild?.title,
+        nextAction: 'Use phase-split proof evidence to isolate playback-only vs capture-only vs playback+during-capture on a future approved proof.',
+      },
+      {
+        title: 'Device truth boundary',
+        status: 'red' as const,
+        body: 'Do not claim Record Audition, iPhone speaker audibility, AEC, actor capture, PostTake, save/export, beta, or release readiness from local/source evidence.',
+        evidence: 'Philip device reports remain authoritative over diagnostics.',
+      },
+      {
+        title: 'Tracked work items',
+        status: 'yellow' as const,
+        body: 'Legacy manually-entered work items are stale and are not current SelfTape truth. Mission Control must replace these with auto-mirrored Telegram/agent work packets.',
+        evidence: activeItems.length > 0 ? `Legacy items still present: ${activeItems.slice(0, 3).map((item) => item.title).join('; ')}` : 'No current work packets yet.',
+        nextAction: 'Next pass: auto-create/update project work packets from Mildred actions, agent sessions, cron runs, and build/proof events.',
+      },
+      {
+        title: 'Freshness',
+        status: 'green' as const,
+        body: `Checked live now. BUILD-LOG touched ${buildLogTouched ? new Date(buildLogTouched).toLocaleString() : 'unknown'}; PROJECT.md touched ${projectTouched ? new Date(projectTouched).toLocaleString() : 'unknown'}.`,
+        evidence: 'This replaces the old hardcoded Build 279 Ops panel.',
+      },
+    ],
+    links: [project.repo_url ? { label: 'Repo', href: project.repo_url } : null, project.live_url ? { label: 'Live site', href: project.live_url } : null].filter(Boolean),
+  };
+}
+
 async function readProjectDetail(id: string) {
   const project = selectProjectById.get(id);
   if (!project) return null;
@@ -834,11 +977,16 @@ async function readProjectDetail(id: string) {
     }
   }
 
+  const cockpit = project.id === 'selftape'
+    ? buildSelfTapeCockpit(project, work_items)
+    : buildGenericCockpit(project, work_items);
+
   return {
     ...project,
     work_items,
     cron_job_ids,
     cron_jobs,
+    cockpit,
   };
 }
 

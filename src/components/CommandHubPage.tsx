@@ -6,7 +6,7 @@ interface CommandHubPageProps {
   tasks: Task[];
   protectedWork: ProtectedWorkResponse | null;
   onOpenTask: (taskId: string) => void;
-  onOpenView: (view: 'office' | 'dashboard' | 'ops' | 'board' | 'projects') => void;
+  onOpenView: (view: 'office' | 'dashboard' | 'board' | 'projects') => void;
   onApproveTask: (taskId: string) => void;
   onHoldTask: (taskId: string) => void;
   onRejectTask: (taskId: string) => void;
@@ -109,7 +109,7 @@ export function CommandHubPage({ tasks, protectedWork, onOpenTask, onOpenView, o
           <p className="text-2xl font-semibold text-amber-200">{blocked.length}</p>
           <p className="mt-1 text-sm text-slate-400">Blocked</p>
         </button>
-        <button onClick={() => onOpenView('ops')} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
+        <button onClick={() => onOpenView('projects')} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-left transition hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
           <p className="text-2xl font-semibold text-emerald-200">{recentlyDone.length}</p>
           <p className="mt-1 text-sm text-slate-400">Recently Verified</p>
         </button>
@@ -146,9 +146,9 @@ export function CommandHubPage({ tasks, protectedWork, onOpenTask, onOpenView, o
       <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
         <Panel title="Project Cockpits" subtitle="Fast paths into the deeper operating surfaces.">
           <div className="grid gap-3 sm:grid-cols-2">
-            <button onClick={() => onOpenView('ops')} className="rounded-2xl border border-red-500/30 bg-red-500/10 p-4 text-left hover:bg-red-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-300">
-              <p className="font-medium text-red-100">Self-e-Tape Ops</p>
-              <p className="mt-1 text-sm text-red-100/70">Build 279 truth gate, diagnostics, product lanes.</p>
+            <button onClick={() => onOpenView('projects')} className="rounded-2xl border border-orange-500/30 bg-orange-500/10 p-4 text-left hover:bg-orange-500/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-300">
+              <p className="font-medium text-orange-100">Project Cockpits</p>
+              <p className="mt-1 text-sm text-orange-100/70">Open Self-e-Tape, Mission Control, Hawco, CoverageIQ, and see live status in context.</p>
             </button>
             <button onClick={() => onOpenView('projects')} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-left hover:border-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400">
               <p className="font-medium text-slate-100">All Projects</p>

@@ -1,6 +1,6 @@
 import type { StatusId } from './components/ui';
 
-export type ViewMode = 'hub' | 'office' | 'dashboard' | 'board' | 'projects' | 'ops';
+export type ViewMode = 'hub' | 'office' | 'dashboard' | 'board' | 'projects';
 
 export interface Agent {
   id: string;
@@ -346,6 +346,25 @@ export interface CronJob {
   };
 }
 
+
+export interface ProjectCockpit {
+  type: 'selftape' | 'generic';
+  freshness: 'live' | 'mixed' | 'static' | 'unavailable';
+  title: string;
+  updatedAt: number;
+  summary: string;
+  evidenceLabel: string;
+  warnings: string[];
+  sections: Array<{
+    title: string;
+    status: 'green' | 'yellow' | 'red' | 'slate';
+    body: string;
+    evidence?: string;
+    nextAction?: string;
+  }>;
+  links?: Array<{ label: string; href: string }>;
+}
+
 export interface ProjectDetail {
   id: string;
   name: string;
@@ -360,6 +379,7 @@ export interface ProjectDetail {
   work_items: WorkItem[];
   cron_job_ids: string[];
   cron_jobs: CronJob[];
+  cockpit?: ProjectCockpit;
 }
 
 export interface ProtectedWorkCategory {

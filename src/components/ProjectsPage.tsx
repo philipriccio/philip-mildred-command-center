@@ -40,6 +40,22 @@ function statusTone(status?: string) {
   return 'bg-slate-800 text-slate-300 border-slate-700';
 }
 
+
+function cockpitTone(status: 'green' | 'yellow' | 'red' | 'slate') {
+  if (status === 'green') return 'border-emerald-400/30 bg-emerald-500/10 text-emerald-100';
+  if (status === 'yellow') return 'border-amber-400/30 bg-amber-500/10 text-amber-100';
+  if (status === 'red') return 'border-rose-400/40 bg-rose-500/10 text-rose-100';
+  return 'border-slate-800 bg-slate-950/60 text-slate-200';
+}
+
+function freshnessLabel(freshness?: NonNullable<ProjectDetail['cockpit']>['freshness']) {
+  if (freshness === 'live') return 'Live checked now';
+  if (freshness === 'mixed') return 'Mixed live + manual';
+  if (freshness === 'static') return 'Static / needs refresh';
+  if (freshness === 'unavailable') return 'Unavailable';
+  return 'No cockpit configured';
+}
+
 function priorityTone(priority: number) {
   if (priority <= 0) return 'bg-rose-500/10 text-rose-300 border-rose-500/30';
   if (priority === 1) return 'bg-amber-500/10 text-amber-300 border-amber-500/30';
@@ -245,6 +261,45 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
                   <p className="mt-2 break-all text-sm text-slate-300">{detail.local_path ?? 'Not set'}</p>
                 </div>
               </div>
+            </Panel>
+
+            <Panel title={detail.cockpit?.title ?? `${detail.name} cockpit`} subtitle={detail.cockpit ? `${freshnessLabel(detail.cockpit.freshness)} · ${detail.cockpit.evidenceLabel}` : 'Live operating state for this project.'}>
+              {detail.cockpit ? (
+                <div className="space-y-5">
+                  <div className="rounded-3xl border border-blue-400/30 bg-blue-500/10 p-5">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.28em] text-blue-200">Current truth</p>
+                        <p className="mt-2 max-w-4xl text-sm leading-6 text-blue-50">{detail.cockpit.summary}</p>
+                      </div>
+                      <span className="rounded-full border border-blue-300/30 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-blue-100">{freshnessLabel(detail.cockpit.freshness)}</span>
+                    </div>
+                  </div>
+
+                  {detail.cockpit.warnings.length > 0 && (
+                    <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4">
+                      <p className="text-xs uppercase tracking-[0.24em] text-amber-200">Read before trusting this page</p>
+                      <ul className="mt-3 space-y-2 text-sm leading-6 text-amber-50">
+                        {detail.cockpit.warnings.map((warning) => <li key={warning}>• {warning}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {detail.cockpit.sections.map((section) => (
+                      <div key={section.title} className={`rounded-2xl border p-4 ${cockpitTone(section.status)}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="font-semibold text-current">{section.title}</h3>
+                          <span className="rounded-full border border-current/20 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide opacity-80">{section.status}</span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-current/90">{section.body}</p>
+                        {section.evidence && <p className="mt-3 rounded-xl border border-current/15 bg-black/10 px-3 py-2 text-xs leading-5 text-current/80"><span className="font-semibold">Evidence: </span>{section.evidence}</p>}
+                        {section.nextAction && <p className="mt-2 text-xs leading-5 text-current/75"><span className="font-semibold">Next: </span>{section.nextAction}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : <EmptyState message="No live cockpit has been configured for this project yet." />}
             </Panel>
 
             <Panel title="Work Queue" subtitle="Grouped by status for this project.">

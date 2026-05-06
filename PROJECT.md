@@ -461,3 +461,10 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Checklist recommends private Cloudflare Access-gated staging at `mission.companytheatre.ca`, read-mostly mode, high-risk actions disabled, persistent `/data`, daily backups, and GitHub PAT revocation before public-launch confidence.
 - Updated deployment readiness/runbook docs to point at the approval checklist.
 - Still no public deploy, DNS change, tunnel, or gateway exposure.
+
+## Projects-first cockpit refactor — May 6, 2026
+- Removed the misleading top-level Self-e-Tape-only `Ops` navigation concept from the main nav.
+- Added project cockpit data to `/api/projects/:id`; Self-e-Tape now has a live cockpit under Projects using current repo/BUILD-LOG/PROJECT evidence instead of stale hardcoded Build 279 copy.
+- Projects page now renders a live cockpit panel with freshness, warnings, current source edge, latest build/proof edge, device-truth boundaries, stale legacy work-item warnings, and next action.
+- Command Hub project shortcut now points to Projects rather than a standalone Ops tab.
+- Verification: `npm run build` passed; local API restarted; `GET /api/projects/selftape` returns cockpit truth with SelfTape head `d5cb9b3` and Build 300 status. Runtime `server/data.db` changed from local server use and is intentionally not committed.
