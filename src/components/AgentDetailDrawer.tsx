@@ -85,10 +85,13 @@ export function AgentDetailDrawer({
 
       // Get office agent info from the office_agents table
       const officeRes = await fetch(`${apiBase}/api/office/agents`);
-      const officeAgents = await officeRes.json();
-      const officeAgent = Array.isArray(officeAgents)
-        ? officeAgents.find((a: { id: string }) => a.id === agentId)
-        : null;
+      const officeAgentsPayload = await officeRes.json();
+      const officeAgents = Array.isArray(officeAgentsPayload)
+        ? officeAgentsPayload
+        : Array.isArray(officeAgentsPayload?.agents)
+          ? officeAgentsPayload.agents
+          : [];
+      const officeAgent = officeAgents.find((a: { id: string }) => a.id === agentId) ?? null;
 
       setDetail({
         id: agentId,

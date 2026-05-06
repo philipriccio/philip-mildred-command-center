@@ -379,10 +379,10 @@ export class GatewayClient {
         maxProtocol: 3,
         role: 'operator',
         client: {
-          id: 'openclaw-control-ui',
+          id: 'gateway-client',
           version: '0.1.0',
           platform: 'node',
-          mode: 'ui',
+          mode: 'backend',
         },
         caps: ['tool-events'],
         scopes: ['operator.admin', 'operator.read'],

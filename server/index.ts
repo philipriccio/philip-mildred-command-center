@@ -256,6 +256,7 @@ interface ActivityEntry {
 }
 
 const LIVE_AGENT_ACTIVITY_TTL_MS = 45_000;
+const AGENT_IDLE_TASK_LABELS = new Set(['Run ended', 'Idle', '']);
 const liveAgentActivity = new Map<string, { officeState: string; taskLabel: string | null; lastSeen: number }>();
 
 interface ProjectRow {
@@ -2110,7 +2111,20 @@ app.get('/api/office/agents', (_req, res) => {
     if (live && now - live.lastSeen < LIVE_AGENT_ACTIVITY_TTL_MS) {
       return { ...agent, state: live.officeState, current_task: live.taskLabel };
     }
-    return agent;
+
+    const gatewayState = gateway?.isConnected() ? gateway.getAgentState(agent.id) : undefined;
+    if (gatewayState) {
+      const officeState = mapVisualStatusToOffice(gatewayState.status);
+      const taskLabel = gatewayState.currentTool
+        ? `Using ${gatewayState.currentTool}`
+        : gatewayState.lastMessage && officeState !== 'idle'
+          ? gatewayState.lastMessage.slice(0, 80)
+          : null;
+      return { ...agent, state: officeState, current_task: taskLabel };
+    }
+
+    const currentTask = AGENT_IDLE_TASK_LABELS.has(agent.current_task ?? '') ? null : agent.current_task;
+    return { ...agent, current_task: agent.state === 'idle' ? null : currentTask };
   });
   res.json({ agents });
 });
@@ -2347,11 +2361,12 @@ function initGateway() {
 
     const officeAgent = selectOfficeAgentById.get(parsed.agentId);
     const agentName = officeAgent?.name ?? AGENT_DISPLAY_NAMES[parsed.agentId] ?? parsed.agentId;
-    const taskLabel = parsed.tool
+    const rawTaskLabel = parsed.tool
       ? `Using ${parsed.tool}`
       : parsed.summary.length > 60
         ? parsed.summary.slice(0, 60) + '...'
         : parsed.summary || null;
+    const taskLabel = officeState === 'idle' || rawTaskLabel === 'Run ended' ? null : rawTaskLabel;
 
     liveAgentActivity.set(parsed.agentId, { officeState, taskLabel, lastSeen: now });
 

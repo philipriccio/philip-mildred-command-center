@@ -331,6 +331,8 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         />
       </div>
 
+      <AgentDeskLedger agents={agents} onOpenAgent={(agentId) => void openAgentDetail(agentId)} />
+
       <ActivityFeed entries={activity} nowMs={nowMs} />
 
       <ReportsPanel
@@ -359,6 +361,50 @@ export function OfficePage({ apiBase, wsUrl }: { apiBase: string; wsUrl: string 
         />
       )}
     </div>
+  );
+}
+
+function AgentDeskLedger({ agents, onOpenAgent }: { agents: OfficeAgent[]; onOpenAgent: (agentId: string) => void }) {
+  return (
+    <section className="rounded-3xl border border-slate-800 bg-slate-950/90 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Desk truth</p>
+          <h3 className="mt-1 text-lg font-semibold text-slate-100">What each agent is actually working on</h3>
+          <p className="mt-1 text-xs text-slate-500">Working desks require live gateway activity. Idle desks do not count as active work.</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {agents.map((agent) => {
+          const isWorking = agent.state === 'working';
+          const isBlocked = agent.state === 'blocked';
+          const stateClasses = isWorking
+            ? 'border-emerald-500/40 bg-emerald-950/20 text-emerald-200'
+            : isBlocked
+              ? 'border-amber-500/40 bg-amber-950/20 text-amber-200'
+              : 'border-slate-800 bg-slate-900/60 text-slate-400';
+          return (
+            <button
+              key={agent.id}
+              onClick={() => onOpenAgent(agent.id)}
+              className={`rounded-2xl border p-4 text-left transition hover:border-slate-600 ${stateClasses}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: agent.color }} />
+                  <span className="font-semibold text-slate-100">{agent.name}</span>
+                </div>
+                <span className="rounded-full border border-current/30 px-2 py-0.5 text-[10px] uppercase tracking-wide">{agent.state}</span>
+              </div>
+              <p className="mt-3 min-h-[2.5rem] text-sm leading-5 text-slate-300">
+                {agent.current_task || (isWorking ? 'Working — task label unavailable' : isBlocked ? 'Blocked — details unavailable' : 'Desk empty')}
+              </p>
+              <p className="mt-3 text-[11px] text-slate-500">Click for sessions and status.</p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
