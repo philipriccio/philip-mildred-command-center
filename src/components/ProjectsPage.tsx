@@ -437,57 +437,54 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
               ) : <EmptyState message="No live cockpit has been configured for this project yet." />}
             </Panel>
 
-            <Panel title={isSelfTape ? 'Current work packets' : 'Work Queue'} subtitle={isSelfTape ? 'Legacy Build 93-era database tasks are intentionally hidden here. Current Self-e-Tape truth is the live cockpit above until task mirroring is rebuilt.' : 'Grouped by status for this project.'}>
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-400">Open items: {visibleWorkItems.filter((item) => item.status !== 'done').length}</p>
-                {!isSelfTape && <button onClick={() => { setShowAddForm((v) => !v); setEditingId(null); setDraft(EMPTY_FORM); }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">Add item</button>}
-              </div>
-              {showAddForm && <div className="mb-4"><WorkItemEditor value={draft} onChange={setDraft} onSave={() => void saveNewItem()} onCancel={() => { setShowAddForm(false); setDraft(EMPTY_FORM); }} /></div>}
-              {isSelfTape && (
-                <div className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
-                  Self-e-Tape work packets will be rebuilt from live Telegram/agent/build events. Old manual tasks like Build 93 testing are hidden because they are stale and misleading.
+            {!isSelfTape && (
+              <Panel title="Work Queue" subtitle="Grouped by status for this project.">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-sm text-slate-400">Open items: {visibleWorkItems.filter((item) => item.status !== 'done').length}</p>
+                  <button onClick={() => { setShowAddForm((v) => !v); setEditingId(null); setDraft(EMPTY_FORM); }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">Add item</button>
                 </div>
-              )}
-              <div className="space-y-5">
-                {WORK_ITEM_COLUMNS.map((column) => (
-                  <div key={column.id} className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <h3 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-400">{column.label}</h3>
-                      <span className="text-xs text-slate-500">{groupedItems[column.id].length}</span>
-                    </div>
-                    <div className="space-y-3">
-                      {groupedItems[column.id].map((item) => (
-                        <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
-                          {editingId === item.id ? (
-                            <WorkItemEditor value={draft} onChange={setDraft} onSave={() => void saveEdit()} onCancel={() => { setEditingId(null); setDraft(EMPTY_FORM); }} />
-                          ) : (
-                            <>
-                              <div className="flex items-start justify-between gap-3">
-                                <div className="flex items-start gap-3">
-                                  <input type="checkbox" checked={item.status === 'done'} onChange={(e) => void updateItem(item.id, { status: e.target.checked ? 'done' : 'todo' })} className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-950 text-blue-500" />
-                                  <button onClick={() => startEdit(item)} className="text-left">
-                                    <p className="font-medium text-slate-100">{item.title}</p>
-                                    {item.description && <p className="mt-1 text-sm text-slate-400">{item.description}</p>}
-                                  </button>
+                {showAddForm && <div className="mb-4"><WorkItemEditor value={draft} onChange={setDraft} onSave={() => void saveNewItem()} onCancel={() => { setShowAddForm(false); setDraft(EMPTY_FORM); }} /></div>}
+                <div className="space-y-5">
+                  {WORK_ITEM_COLUMNS.map((column) => (
+                    <div key={column.id} className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-sm font-semibold uppercase tracking-[0.24em] text-slate-400">{column.label}</h3>
+                        <span className="text-xs text-slate-500">{groupedItems[column.id].length}</span>
+                      </div>
+                      <div className="space-y-3">
+                        {groupedItems[column.id].map((item) => (
+                          <div key={item.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
+                            {editingId === item.id ? (
+                              <WorkItemEditor value={draft} onChange={setDraft} onSave={() => void saveEdit()} onCancel={() => { setEditingId(null); setDraft(EMPTY_FORM); }} />
+                            ) : (
+                              <>
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="flex items-start gap-3">
+                                    <input type="checkbox" checked={item.status === 'done'} onChange={(e) => void updateItem(item.id, { status: e.target.checked ? 'done' : 'todo' })} className="mt-1 h-4 w-4 rounded border-slate-700 bg-slate-950 text-blue-500" />
+                                    <button onClick={() => startEdit(item)} className="text-left">
+                                      <p className="font-medium text-slate-100">{item.title}</p>
+                                      {item.description && <p className="mt-1 text-sm text-slate-400">{item.description}</p>}
+                                    </button>
+                                  </div>
+                                  <button onClick={() => void deleteItem(item.id)} className="text-sm text-slate-500 hover:text-rose-300">✕</button>
                                 </div>
-                                <button onClick={() => void deleteItem(item.id)} className="text-sm text-slate-500 hover:text-rose-300">✕</button>
-                              </div>
-                              <div className="mt-3 flex flex-wrap gap-2 text-xs">
-                                <span className={`rounded-full border px-2.5 py-1 ${priorityTone(item.priority)}`}>{`P${item.priority}`}</span>
-                                <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-300">{item.assigned_agent ?? 'Unassigned'}</span>
-                                <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-300">{column.label}</span>
-                              </div>
-                              {item.status === 'blocked' && item.blocker_reason && <p className="mt-3 text-sm text-amber-300">Blocked: {item.blocker_reason}</p>}
-                            </>
-                          )}
-                        </div>
-                      ))}
-                      {groupedItems[column.id].length === 0 && <EmptyState message={`No ${column.label.toLowerCase()} items.`} />}
+                                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                                  <span className={`rounded-full border px-2.5 py-1 ${priorityTone(item.priority)}`}>{`P${item.priority}`}</span>
+                                  <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-300">{item.assigned_agent ?? 'Unassigned'}</span>
+                                  <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-300">{column.label}</span>
+                                </div>
+                                {item.status === 'blocked' && item.blocker_reason && <p className="mt-3 text-sm text-amber-300">Blocked: {item.blocker_reason}</p>}
+                              </>
+                            )}
+                          </div>
+                        ))}
+                        {groupedItems[column.id].length === 0 && <EmptyState message={`No ${column.label.toLowerCase()} items.`} />}
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </Panel>
+                  ))}
+                </div>
+              </Panel>
+            )}
 
             <Panel title="Cron Jobs" subtitle="Automation linked to this project.">
               <div className="mb-4 flex flex-wrap items-center gap-3">
