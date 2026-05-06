@@ -475,3 +475,38 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Self-e-Tape cockpit now exposes permanent workstream cards for Sides Parser, AI Reader, and Final Sound / Export with owner, current truth, next safe local action, proof required, latest report, and evidence paths.
 - Parser cockpit status currently shows 10 selected real-side cases, 0 confirmed, 9 needing truth, 1 blocked by no text, and 0 regression-ready. This is intentionally not parser readiness.
 - Verified locally with `npm run build`, `/api/projects/selftape`, `/api/projects`, frontend HTTP 200, and `/api/office/agents` returning idle/no stale current tasks.
+
+## Agent packet operating rules — May 6, 2026
+Mission Control workstreams should advance through explicit packets, not vague ongoing effort.
+
+A valid packet must include:
+- project and blocker/workstream
+- objective in plain English
+- owner (`Mildred`, `Dev`, `Research`, `QA/proof`, or named agent)
+- allowed scope
+- forbidden actions / approval gates
+- exact files, reports, tests, or artifacts expected
+- evidence label (`EXTERNAL_RESEARCH`, `LOCAL_SOURCE_AUDIT`, `LOCAL_TEST`, `DEVICE_EVIDENCE`, `PRODUCT_OBSERVATION`, `HYPOTHESIS`, `REJECTED`)
+- definition of done
+- where the result is written back for the cockpit
+
+Allowed without new Philip approval when scoped:
+- external research and research ledger updates
+- source audit
+- fixture creation
+- local scripts/tests
+- documentation/reports
+- Dev briefs
+- local reversible implementation that does not trigger paid builds or external effects
+
+Must stop and ask Philip before:
+- EAS/TestFlight/App Store builds or submissions
+- phone/device testing requests
+- release/beta/readiness claims
+- public deploys, DNS, tunnels, or external sends
+- product decisions that change actor workflow or market positioning
+- spending or relationship-sensitive outreach
+
+If a packet has no measurable output, repeats a failed approach, or requires a device/build/product decision, it must become `BLOCKED` or `AWAITING_PHILIP` instead of continuing as busywork.
+
+Mission Control should show packet state as visibility, not authority. Telegram remains the approval and instruction surface.
