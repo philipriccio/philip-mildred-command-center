@@ -167,14 +167,17 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
 
   const groupedItems = useMemo(() => {
     const groups: Record<WorkItemStatus, WorkItem[]> = { todo: [], in_progress: [], blocked: [], done: [] };
-    for (const item of detail?.work_items ?? []) groups[item.status].push(item);
+    for (const item of visibleWorkItems) groups[item.status].push(item);
     return groups;
-  }, [detail]);
+  }, [visibleWorkItems]);
 
   const availableCronJobs = useMemo(() => {
     const linked = new Set(detail?.cron_job_ids ?? []);
     return cronJobs.filter((job) => !linked.has(job.id));
   }, [cronJobs, detail]);
+
+  const isSelfTape = detail?.id === 'selftape';
+  const visibleWorkItems = isSelfTape ? [] : (detail?.work_items ?? []);
 
   const startEdit = (item: WorkItem) => {
     setEditingId(item.id);
@@ -319,12 +322,17 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
               ) : <EmptyState message="No live cockpit has been configured for this project yet." />}
             </Panel>
 
-            <Panel title="Work Queue" subtitle="Grouped by status for this project.">
+            <Panel title={isSelfTape ? 'Current work packets' : 'Work Queue'} subtitle={isSelfTape ? 'Legacy Build 93-era database tasks are intentionally hidden here. Current Self-e-Tape truth is the live cockpit above until task mirroring is rebuilt.' : 'Grouped by status for this project.'}>
               <div className="mb-4 flex items-center justify-between gap-3">
-                <p className="text-sm text-slate-400">Open items: {(detail.work_items ?? []).filter((item) => item.status !== 'done').length}</p>
-                <button onClick={() => { setShowAddForm((v) => !v); setEditingId(null); setDraft(EMPTY_FORM); }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">Add item</button>
+                <p className="text-sm text-slate-400">Open items: {visibleWorkItems.filter((item) => item.status !== 'done').length}</p>
+                {!isSelfTape && <button onClick={() => { setShowAddForm((v) => !v); setEditingId(null); setDraft(EMPTY_FORM); }} className="rounded-xl bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500">Add item</button>}
               </div>
               {showAddForm && <div className="mb-4"><WorkItemEditor value={draft} onChange={setDraft} onSave={() => void saveNewItem()} onCancel={() => { setShowAddForm(false); setDraft(EMPTY_FORM); }} /></div>}
+              {isSelfTape && (
+                <div className="mb-4 rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm leading-6 text-amber-50">
+                  Self-e-Tape work packets will be rebuilt from live Telegram/agent/build events. Old manual tasks like Build 93 testing are hidden because they are stale and misleading.
+                </div>
+              )}
               <div className="space-y-5">
                 {WORK_ITEM_COLUMNS.map((column) => (
                   <div key={column.id} className="rounded-2xl border border-slate-800 bg-slate-950/40 p-4">

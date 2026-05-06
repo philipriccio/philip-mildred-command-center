@@ -946,8 +946,8 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
       {
         title: 'Tracked work items',
         status: 'yellow' as const,
-        body: 'Legacy manually-entered work items are stale and are not current SelfTape truth. Mission Control must replace these with auto-mirrored Telegram/agent work packets.',
-        evidence: activeItems.length > 0 ? `Legacy items still present: ${activeItems.slice(0, 3).map((item) => item.title).join('; ')}` : 'No current work packets yet.',
+        body: 'Legacy manually-entered work items are hidden from the Self-e-Tape cockpit because they include stale Build 93-era tasks and are not current truth.',
+        evidence: activeItems.length > 0 ? `${activeItems.length} legacy database item${activeItems.length === 1 ? '' : 's'} suppressed from cockpit display.` : 'No current work packets yet.',
         nextAction: 'Next pass: auto-create/update project work packets from Mildred actions, agent sessions, cron runs, and build/proof events.',
       },
       {
