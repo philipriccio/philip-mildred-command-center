@@ -1034,6 +1034,27 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   };
 }
 
+app.get('/api/projects', (_req, res) => {
+  const projects = db.prepare<ProjectRow & { open_work_items_count: number; work_items_count: number }>(`
+    SELECT p.*,
+      COALESCE(SUM(CASE WHEN wi.status != 'done' THEN 1 ELSE 0 END), 0) AS open_work_items_count,
+      COUNT(wi.id) AS work_items_count
+    FROM projects p
+    LEFT JOIN work_items wi ON wi.project_id = p.id
+    GROUP BY p.id
+    ORDER BY
+      CASE p.id
+        WHEN 'selftape' THEN 0
+        WHEN 'command-center' THEN 1
+        WHEN 'hawco-crm' THEN 2
+        WHEN 'coverageiq' THEN 3
+        ELSE 50
+      END,
+      p.name ASC
+  `).all();
+  res.json(projects);
+});
+
 app.get('/api/projects/:id', async (req, res) => {
   const project = await readProjectDetail(req.params.id);
   if (!project) {
