@@ -165,14 +165,14 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
     });
   }, [loadProject, selectedId]);
 
+  const isSelfTape = detail?.id === 'selftape';
+  const visibleWorkItems = useMemo(() => (isSelfTape ? [] : (detail?.work_items ?? [])), [detail?.work_items, isSelfTape]);
+
   const groupedItems = useMemo(() => {
     const groups: Record<WorkItemStatus, WorkItem[]> = { todo: [], in_progress: [], blocked: [], done: [] };
     for (const item of visibleWorkItems) groups[item.status].push(item);
     return groups;
   }, [visibleWorkItems]);
-
-  const isSelfTape = detail?.id === 'selftape';
-  const visibleWorkItems = useMemo(() => (isSelfTape ? [] : (detail?.work_items ?? [])), [detail?.work_items, isSelfTape]);
 
   const availableCronJobs = useMemo(() => {
     const linked = new Set(detail?.cron_job_ids ?? []);
