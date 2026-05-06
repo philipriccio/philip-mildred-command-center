@@ -926,7 +926,7 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   const projectTouched = readLastTouched(projectPath);
   const activeItems = workItems.filter((item) => item.status === 'in_progress' || item.status === 'todo');
   const warnings = [
-    'This page is written for beta readiness, not engineering pride. Device truth beats app logs.',
+    'This page is written for market leadership, not engineering pride. Device truth beats app logs, and product quality only matters if actors know about it.',
     'The three blockers below are not the whole app; they are the current reasons Self-e-Tape is not beta-ready.',
     dirty ? 'SelfTape repo is dirty — no build or release action can be treated as clean.' : null,
   ].filter(Boolean) as string[];
@@ -938,7 +938,7 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
     updatedAt: Date.now(),
     summary: 'Self-e-Tape is not beta-ready yet. The current work is to remove the three big blockers: parser trust, AI reader reliability/timing, and final sound/export quality.',
     evidenceLabel: 'Plain-English beta blockers backed by live repo, BUILD-LOG, and PROJECT.md',
-    mission: 'Help actors create a professional self-tape on their phone without needing another person to read with them.',
+    mission: 'Make Self-e-Tape the most successful self-tape app in the market: the best product for actors, with the strongest revenue, market share, and awareness.',
     betaStatus: {
       label: 'Not beta-ready',
       body: 'The app can prove pieces of the workflow, but actors cannot trust it yet because the script import, AI reader timing/reliability, and final exported sound are not good enough.',
