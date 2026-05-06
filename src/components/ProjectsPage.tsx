@@ -9,6 +9,22 @@ const WORK_ITEM_COLUMNS: Array<{ id: WorkItemStatus; label: string }> = [
   { id: 'done', label: 'Done' },
 ];
 
+const PROJECT_PRIORITY: Record<string, number> = {
+  selftape: 0,
+  'command-center': 1,
+  'hawco-crm': 2,
+  coverageiq: 3,
+};
+
+function sortProjects(projects: ProjectSummary[]) {
+  return [...projects].sort((a, b) => {
+    const aPriority = PROJECT_PRIORITY[a.id] ?? 50;
+    const bPriority = PROJECT_PRIORITY[b.id] ?? 50;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return a.name.localeCompare(b.name);
+  });
+}
+
 const AGENT_OPTIONS = [
   { id: '', name: 'Unassigned' },
   { id: 'main', name: 'Mildred' },
@@ -110,7 +126,7 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
 
   const loadProjects = useCallback(async () => {
     const response = await fetch(`${apiBase}/api/projects`);
-    const data = await response.json();
+    const data = sortProjects(await response.json());
     setProjects(data);
     if (!selectedId && data[0]?.id) setSelectedId(data[0].id);
   }, [apiBase, selectedId]);
@@ -222,7 +238,7 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
 
   return (
     <div className="grid gap-6 xl:grid-cols-[320px_minmax(0,1fr)]">
-      <Panel title="Projects" subtitle="Portfolio queues and cron ownership.">
+      <Panel title="Projects" subtitle="Self-e-Tape is pinned first; every project opens into its cockpit and work queue.">
         <div className="space-y-3">
           {projects.map((project) => (
             <button key={project.id} onClick={() => setSelectedId(project.id)} className={`w-full rounded-2xl border p-4 text-left transition ${selectedId === project.id ? 'border-blue-500/50 bg-slate-900' : 'border-slate-800 bg-slate-950/50 hover:border-slate-700'}`}>
@@ -233,6 +249,7 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
                     <p className="truncate font-medium text-slate-100">{project.name}</p>
                   </div>
                   <p className="mt-1 text-xs uppercase tracking-wide text-slate-500">{project.slug}</p>
+                  {project.id === 'selftape' && <p className="mt-2 inline-flex rounded-full border border-orange-400/30 bg-orange-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-orange-200">Pinned cockpit</p>}
                 </div>
                 <span className="rounded-full border border-slate-700 px-2 py-1 text-xs text-slate-300">{project.open_work_items_count}</span>
               </div>
