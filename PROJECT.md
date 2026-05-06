@@ -468,3 +468,10 @@ Design implication: Mission Control should show lane-specific caution/authority 
 - Projects page now renders a live cockpit panel with freshness, warnings, current source edge, latest build/proof edge, device-truth boundaries, stale legacy work-item warnings, and next action.
 - Command Hub project shortcut now points to Projects rather than a standalone Ops tab.
 - Verification: `npm run build` passed; local API restarted; `GET /api/projects/selftape` returns cockpit truth with SelfTape head `d5cb9b3` and Build 300 status. Runtime `server/data.db` changed from local server use and is intentionally not committed.
+
+## Projects-first cockpit hardening — May 6, 2026
+- Cleaned local runtime boundary: `server/data.db` is runtime state and should not be committed as source truth.
+- Self-e-Tape cockpit now reads parser packet truth status from the SelfTape repo (`parser-lab/real-sides/review-batches/packet-002/truth-status-report.json`) instead of relying only on hardcoded copy.
+- Self-e-Tape cockpit now exposes permanent workstream cards for Sides Parser, AI Reader, and Final Sound / Export with owner, current truth, next safe local action, proof required, latest report, and evidence paths.
+- Parser cockpit status currently shows 10 selected real-side cases, 0 confirmed, 9 needing truth, 1 blocked by no text, and 0 regression-ready. This is intentionally not parser readiness.
+- Verified locally with `npm run build`, `/api/projects/selftape`, `/api/projects`, frontend HTTP 200, and `/api/office/agents` returning idle/no stale current tasks.

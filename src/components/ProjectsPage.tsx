@@ -353,6 +353,34 @@ export function ProjectsPage({ apiBase }: { apiBase: string }) {
                       </div>
                     </div>
 
+
+                    {(detail.cockpit.workstreams ?? []).length > 0 && (
+                      <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-5">
+                        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Permanent workstreams</p>
+                        <h3 className="mt-1 text-lg font-semibold text-slate-100">What agents can keep moving without noise</h3>
+                        <div className="mt-4 grid gap-4 xl:grid-cols-3">
+                          {(detail.cockpit.workstreams ?? []).map((stream) => (
+                            <div key={stream.id} className="rounded-2xl border border-slate-800 bg-slate-900/50 p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <h4 className="font-semibold text-slate-100">{stream.title}</h4>
+                                <span className="rounded-full border border-slate-700 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">{stream.status.replace('_', ' ')}</span>
+                              </div>
+                              <p className="mt-2 text-xs text-slate-500">Owner: {stream.owner}</p>
+                              <p className="mt-3 text-sm leading-6 text-slate-300"><span className="font-semibold text-slate-100">Current truth: </span>{stream.currentTruth}</p>
+                              <p className="mt-3 rounded-xl border border-blue-400/20 bg-blue-500/10 p-3 text-sm leading-6 text-blue-50"><span className="font-semibold">Next safe action: </span>{stream.nextSafeAction}</p>
+                              <p className="mt-3 text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-400">Proof required: </span>{stream.proofRequired}</p>
+                              {stream.latestReport && <p className="mt-2 text-xs leading-5 text-slate-500"><span className="font-semibold text-slate-400">Latest report: </span>{stream.latestReport}</p>}
+                              <div className="mt-3 space-y-1">
+                                {stream.evidencePaths.map((pathItem) => (
+                                  <p key={`${stream.id}-${pathItem.label}`} className="text-[11px] leading-5 text-slate-500">{pathItem.label}: <span className="text-slate-400">{pathItem.path}</span></p>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
                       <div className="rounded-3xl border border-slate-800 bg-slate-950/60 p-5">
                         <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Other app areas</p>

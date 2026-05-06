@@ -367,6 +367,18 @@ export interface SelfTapeBlocker {
   reports: Array<{ label: string; path?: string; note: string }>;
 }
 
+export interface ProjectWorkstream {
+  id: string;
+  title: string;
+  status: 'ready' | 'in_progress' | 'blocked' | 'waiting' | 'complete';
+  owner: string;
+  currentTruth: string;
+  nextSafeAction: string;
+  proofRequired: string;
+  latestReport?: string;
+  evidencePaths: Array<{ label: string; path: string }>;
+}
+
 export interface ProjectCockpit {
   type: 'selftape' | 'generic';
   freshness: 'live' | 'mixed' | 'static' | 'unavailable';
@@ -381,6 +393,7 @@ export interface ProjectCockpit {
     body: string;
   };
   betaBlockers?: SelfTapeBlocker[];
+  workstreams?: ProjectWorkstream[];
   secondaryAreas?: Array<{
     title: string;
     status: 'ok' | 'needs_work' | 'unknown';

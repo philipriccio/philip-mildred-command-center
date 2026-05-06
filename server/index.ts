@@ -911,6 +911,53 @@ function buildGenericCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   };
 }
 
+
+function readJsonFile<T extends JsonValue>(filePath: string): T | null {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    return JSON.parse(fs.readFileSync(filePath, 'utf8')) as T;
+  } catch {
+    return null;
+  }
+}
+
+function readFirstMarkdownHeading(filePath: string) {
+  try {
+    if (!fs.existsSync(filePath)) return null;
+    const text = fs.readFileSync(filePath, 'utf8');
+    return text.split('\n').find((line) => line.startsWith('## '))?.replace(/^##\s+/, '').trim() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function readSelfTapeParserPacketStatus(sourcePath: string) {
+  const statusPath = path.join(sourcePath, 'parser-lab/real-sides/review-batches/packet-002/truth-status-report.json');
+  const status = readJsonFile<JsonObject>(statusPath);
+  const totals = (status?.totals && typeof status.totals === 'object') ? status.totals as JsonObject : null;
+  return {
+    statusPath: 'parser-lab/real-sides/review-batches/packet-002/truth-status-report.json',
+    reviewPacketPath: 'parser-lab/real-sides/review-batches/packet-002/HUMAN-REVIEW-PACKET.md',
+    fillableFormsPath: 'parser-lab/real-sides/review-batches/packet-002/fillable-forms/',
+    total: Number(totals?.total ?? 0),
+    confirmed: Number(totals?.confirmed ?? 0),
+    needsTruth: Number(totals?.needsTruth ?? 0),
+    blockedNoText: Number(totals?.blockedNoText ?? 0),
+    regressionReady: Number(totals?.regressionReady ?? 0),
+    touched: readLastTouched(statusPath),
+  };
+}
+
+function readSelfTapeWorkstreamState(sourcePath: string, id: string) {
+  const base = path.join(sourcePath, 'workstreams', id);
+  return {
+    currentPacket: readFirstMarkdownHeading(path.join(base, 'CURRENT-PACKET.md')),
+    currentTouched: readLastTouched(path.join(base, 'CURRENT-PACKET.md')),
+    doneTouched: readLastTouched(path.join(base, 'DONE.md')),
+    reportsTouched: readLastTouched(path.join(base, 'REPORTS.md')),
+  };
+}
+
 function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   const sourcePath = project.local_path ?? '/Users/mildred/.openclaw/workspace/projects/SelfTapeApp';
   const branch = safeExec('git', ['rev-parse', '--abbrev-ref', 'HEAD'], sourcePath);
@@ -926,6 +973,10 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   const buildLogTouched = readLastTouched(buildLogPath);
   const projectTouched = readLastTouched(projectPath);
   const activeItems = workItems.filter((item) => item.status === 'in_progress' || item.status === 'todo');
+  const parserPacket = readSelfTapeParserPacketStatus(sourcePath);
+  const parserWorkstream = readSelfTapeWorkstreamState(sourcePath, 'parser');
+  const aiReaderWorkstream = readSelfTapeWorkstreamState(sourcePath, 'ai-reader');
+  const soundWorkstream = readSelfTapeWorkstreamState(sourcePath, 'final-sound-export');
   const warnings = [
     'This page is written for market leadership, not engineering pride. Device truth beats app logs, and product quality only matters if actors know about it.',
     'The three blockers below are not the whole app; they are the current reasons Self-e-Tape is not beta-ready.',
@@ -952,14 +1003,17 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         goal: 'Sides import cleanly enough that actors trust the script.',
         currentTruth: 'Not good enough yet. Real audition sides still produce missing, merged, or contaminated lines, so an actor could rehearse or record from the wrong text.',
         whyItBlocksBeta: 'If the script is wrong, the product breaks before recording starts.',
-        nextAction: 'Build a parser truth set from real sides and track every failure as pass/fail examples, not vague parser confidence.',
-        status: 'blocked' as const,
-        proofLevel: 'Known product blocker; needs parser fixture proof on messy real sides.',
+        nextAction: parserPacket.confirmed === 0 ? `Use Packet 002 review forms: ${parserPacket.total} cases selected, ${parserPacket.confirmed} confirmed, ${parserPacket.needsTruth} still need truth, ${parserPacket.blockedNoText} blocked by no text.` : 'Promote confirmed truth into parser regression fixtures, then fix parser against those fixtures.',
+        status: parserPacket.confirmed > 0 ? 'in_progress' as const : 'waiting' as const,
+        proofLevel: `Local parser lab: ${parserPacket.total} real-side cases selected, ${parserPacket.confirmed} confirmed, ${parserPacket.regressionReady} regression-ready. Human truth required before parser fixes.`,
         reports: [
           { label: 'Parser research ledger', path: 'reports/research/parser/CURRENT-RESEARCH.md', note: 'External/internal research that every parser agent must read first.' },
           { label: 'Parser questions', path: 'reports/research/parser/RESEARCH-QUESTIONS.md', note: 'Open research questions and unknowns.' },
           { label: 'Do not repeat', path: 'reports/research/parser/TRIED-AND-FAILED.md', note: 'Rejected approaches and stale assumptions.' },
           { label: 'Project truth', path: 'PROJECT.md', note: 'Current parser risks and release boundary.' },
+          { label: 'Human review packet', path: parserPacket.reviewPacketPath, note: 'Readable Packet 002 review sheets.' },
+          { label: 'Truth status report', path: parserPacket.statusPath, note: `${parserPacket.confirmed}/${parserPacket.total} confirmed; ${parserPacket.regressionReady} regression-ready.` },
+          { label: 'Fillable P0 forms', path: parserPacket.fillableFormsPath, note: 'First three P0 cases prepared for structured truth capture.' },
         ],
       },
       {
@@ -992,6 +1046,52 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
           { label: 'Sound/export questions', path: 'reports/research/final-sound-export/RESEARCH-QUESTIONS.md', note: 'Open research questions around capture format, static, and final mix.' },
           { label: 'Do not repeat', path: 'reports/research/final-sound-export/TRIED-AND-FAILED.md', note: 'Rejected approaches and stale assumptions.' },
           { label: 'Build 300 artifact gates', path: 'artifacts/record-audition-audio-gates/latest/', note: 'Verifier and received ZIP analysis live under artifact gates.' },
+        ],
+      },
+    ],
+    workstreams: [
+      {
+        id: 'parser',
+        title: 'Sides Parser',
+        status: parserPacket.confirmed > 0 ? 'in_progress' as const : 'waiting' as const,
+        owner: 'Mildred + Philip truth review',
+        currentTruth: `${parserPacket.total} real-side review cases selected; ${parserPacket.confirmed} confirmed; ${parserPacket.needsTruth} need truth; ${parserPacket.blockedNoText} blocked by no text.`,
+        nextSafeAction: 'Fill/confirm the first P0 truth forms from the original PDFs, then promote confirmed truth into regression fixtures.',
+        proofRequired: 'CONFIRMED_TRUTH annotations plus passing parser regression fixtures. No parser fix from baseline output alone.',
+        latestReport: parserWorkstream.currentPacket ?? 'Parser workstream packet not found',
+        evidencePaths: [
+          { label: 'Human review packet', path: parserPacket.reviewPacketPath },
+          { label: 'Truth status report', path: parserPacket.statusPath },
+          { label: 'Fillable forms', path: parserPacket.fillableFormsPath },
+          { label: 'Parser current packet', path: 'workstreams/parser/CURRENT-PACKET.md' },
+        ],
+      },
+      {
+        id: 'ai-reader',
+        title: 'AI Reader',
+        status: 'blocked' as const,
+        owner: 'Mildred / future native-audio packet',
+        currentTruth: 'Build 300 preserved a clean reader source but Philip did not hear AI voice in Artifact Proof; scheduling evidence is not audibility proof.',
+        nextSafeAction: 'Continue source-side phase proof design only; no phone/build ask without explicit diagnostic scope.',
+        proofRequired: 'Device proof separating playback-only, capture-only, playback+during-capture, and route/session evidence.',
+        latestReport: aiReaderWorkstream.currentPacket ?? 'AI Reader workstream packet not yet active',
+        evidencePaths: [
+          { label: 'AI reader research', path: 'reports/research/ai-reader/CURRENT-RESEARCH.md' },
+          { label: 'Build log', path: 'BUILD-LOG.md' },
+        ],
+      },
+      {
+        id: 'sound-export',
+        title: 'Final Sound / Export',
+        status: 'blocked' as const,
+        owner: 'Mildred / future audio-proof packet',
+        currentTruth: 'Received device artifacts prove direct AudioEngine capture is corrupt/static; merged/final outputs inherit failure.',
+        nextSafeAction: 'Fix first failing capture layer before final mix/export tuning.',
+        proofRequired: 'Clean direct capture WAV, clean merged actor track, clean final output from real device artifacts.',
+        latestReport: soundWorkstream.currentPacket ?? 'Final sound/export workstream packet not yet active',
+        evidencePaths: [
+          { label: 'Sound/export research', path: 'reports/research/final-sound-export/CURRENT-RESEARCH.md' },
+          { label: 'Artifact gates', path: 'artifacts/record-audition-audio-gates/latest/' },
         ],
       },
     ],
