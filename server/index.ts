@@ -955,7 +955,9 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         status: 'blocked' as const,
         proofLevel: 'Known product blocker; needs parser fixture proof on messy real sides.',
         reports: [
-          { label: 'Parser history', path: 'BUILD-LOG.md', note: 'Contains prior William/Oleson and stage-direction contamination findings.' },
+          { label: 'Parser research ledger', path: 'reports/research/parser/CURRENT-RESEARCH.md', note: 'External/internal research that every parser agent must read first.' },
+          { label: 'Parser questions', path: 'reports/research/parser/RESEARCH-QUESTIONS.md', note: 'Open research questions and unknowns.' },
+          { label: 'Do not repeat', path: 'reports/research/parser/TRIED-AND-FAILED.md', note: 'Rejected approaches and stale assumptions.' },
           { label: 'Project truth', path: 'PROJECT.md', note: 'Current parser risks and release boundary.' },
         ],
       },
@@ -969,8 +971,10 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         status: 'blocked' as const,
         proofLevel: 'Device truth required; source/log proof alone is insufficient.',
         reports: [
+          { label: 'AI Reader research ledger', path: 'reports/research/ai-reader/CURRENT-RESEARCH.md', note: 'External research and current evidence for reader reliability/timing.' },
+          { label: 'AI Reader questions', path: 'reports/research/ai-reader/RESEARCH-QUESTIONS.md', note: 'Open research questions around iPhone audio, AEC, and timing.' },
+          { label: 'Do not repeat', path: 'reports/research/ai-reader/TRIED-AND-FAILED.md', note: 'Rejected approaches and stale assumptions.' },
           { label: 'Build 300 ZIP proof', path: 'BUILD-LOG.md', note: 'ZIP export worked; AI audibility did not.' },
-          { label: 'Artifact proof phase diagnostics', path: 'PROJECT.md', note: 'Current source plan for separating playback from capture.' },
         ],
       },
       {
@@ -983,7 +987,9 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         status: 'blocked' as const,
         proofLevel: 'Received device artifacts proved failure; next proof must isolate the bad layer.',
         reports: [
-          { label: 'Build 297 media RCA', path: 'BUILD-LOG.md', note: 'Confirmed static/actor-burial failure from exported media.' },
+          { label: 'Sound/export research ledger', path: 'reports/research/final-sound-export/CURRENT-RESEARCH.md', note: 'External research and current evidence for capture/final media quality.' },
+          { label: 'Sound/export questions', path: 'reports/research/final-sound-export/RESEARCH-QUESTIONS.md', note: 'Open research questions around capture format, static, and final mix.' },
+          { label: 'Do not repeat', path: 'reports/research/final-sound-export/TRIED-AND-FAILED.md', note: 'Rejected approaches and stale assumptions.' },
           { label: 'Build 300 artifact gates', path: 'artifacts/record-audition-audio-gates/latest/', note: 'Verifier and received ZIP analysis live under artifact gates.' },
         ],
       },
@@ -999,6 +1005,7 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
     reports: [
       { label: 'BUILD-LOG.md', path: 'BUILD-LOG.md', note: 'Chronological build/device/proof history.' },
       { label: 'PROJECT.md', path: 'PROJECT.md', note: 'Current source truth, decisions, and release boundaries.' },
+      { label: 'Research ledger', path: 'reports/research/README.md', note: 'Required research preflight for every blocker agent.' },
       { label: 'Artifact gates', path: 'artifacts/record-audition-audio-gates/latest/', note: 'Proof ZIPs, verifier reports, and audio metrics.' },
     ],
     sections: [
