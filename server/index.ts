@@ -1022,7 +1022,7 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         goal: 'Voice plays reliably, timing feels natural, does not cut off the actor, and does not leave dead air.',
         currentTruth: 'Still not reliable. Build 301 crashed before yielding a proof package; Build 300 preserved a clean reader file but Philip did not hear the AI voice. Scheduling evidence is not the same as heard audio.',
         whyItBlocksBeta: 'The whole promise is a dependable reader. If the reader misses, lags, cuts off, or feels unnatural, actors cannot use it.',
-        nextAction: 'No Build 302. Continue local crash-proof/RCA and split proof into playback-only, capture-only, playback+during-capture, and route/session evidence so we know exactly where the reader fails.',
+        nextAction: 'No Build 302. Continue local crash-proof/RCA, keep package-size guards in place, and split proof into playback-only, capture-only, playback+during-capture, and route/session evidence so we know exactly where the reader fails.',
         status: 'blocked' as const,
         proofLevel: 'Device truth required; source/log proof alone is insufficient.',
         reports: [
@@ -1039,7 +1039,7 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
         goal: 'Final takes sound amazing: clean actor, usable reader, no static, bleed, harshness, or weird gaps.',
         currentTruth: 'Horrendous / unproven right now. Build 297 exported media confirmed actor was buried/static-like, Build 300 artifact gates failed downstream, and Build 301 crashed before yielding media.',
         whyItBlocksBeta: 'A self-tape app lives or dies on final submitted media. If the export sounds bad, nothing else matters.',
-        nextAction: 'No Build 302. First keep Artifact Proof crash-safe, then fix/prove the first failing audio layer before final mix/export tuning.',
+        nextAction: 'No Build 302. First keep Artifact Proof fail-closed, including package-size guards, then fix/prove the first failing audio layer before final mix/export tuning.',
         status: 'blocked' as const,
         proofLevel: 'Received device artifacts proved failure; next proof must isolate the bad layer.',
         reports: [
