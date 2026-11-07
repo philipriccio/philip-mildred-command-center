@@ -513,3 +513,6 @@ Mission Control should show packet state as visibility, not authority. Telegram 
 
 ## Our Work local acceptance — November 7, 2026
 Local interface/backend implemented and verified; no push/deployment. Parent evidence: ../../audits/mission-control-redesign-20261107/PARENT-ACCEPTANCE.md. Actual backend/Engine read-only HTTP and synthetic browser/security proofs pass. Real task-source authority, lifecycle restart reconciliation, protected private transport and live task acceptance remain unfinished. No live readiness claim.
+
+## November 7 continuation — isolated read-only feed
+Separate loopback SQLite-readonly projection implemented; actual Engine adapter HTTP proof and lifecycle suite10/10 pass. See ../../audits/mission-control-redesign-20261107/READONLY-FEED.md. Source-health reconciliation already implemented in5f06a64; old remaining-work description above is superseded. Live binding/private transport remain unproved; no deployment. Configured Dev send denied by session visibility policy; no worker claimed active.

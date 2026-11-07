@@ -43,9 +43,7 @@ export class TaskLifecycle {
   this.db.prepare("UPDATE task_lifecycle_source SET observed_at=? WHERE id=1 AND state='connected'").run(Date.now());
  }
  sourceHealth() {
-  const source=this.db.prepare('SELECT state,observed_at AS observedAt,reason FROM task_lifecycle_source WHERE id=1').get() as {state:string;observedAt:number|null;reason:string};
-  const count=(this.db.prepare('SELECT count(*) AS n FROM task_lifecycle_reconciliation').get() as {n:number}).n;
-  return count?{...source,state:'reconciliation_required',reason:'Execution updates were interrupted or inconsistent. Mildred must reconcile affected tasks; reconnecting alone does not verify them.'}:source;
+  return readSourceHealth(this.db);
  }
  link(taskId: string, input: { goal?: {id:string;title:string}; project?: {id:string;title:string}; occurrenceId?: string; why: string; nextAction: string }) {
   text(taskId,200); text(input.why); text(input.nextAction);
@@ -124,13 +122,7 @@ export class TaskLifecycle {
   })();
  }
  snapshot() {
-  const rows=this.db.prepare('SELECT t.id,t.title,t.description,t.agent_id,t.status,l.* FROM tasks t LEFT JOIN task_lifecycle l ON l.task_id=t.id ORDER BY t.created_at DESC LIMIT 200').all() as (Row & {id:string;title:string;description:string;agent_id:string|null;status:string})[];
-  return {version:1,checkedAt:Date.now(),sourceHealth:this.sourceHealth(),revision:(this.db.prepare('SELECT COALESCE(MAX(revision),0) n FROM task_lifecycle_events').get() as {n:number}).n,tasks:rows.map(r=>({
-   id:r.id,reconciliationNeeded:Boolean(this.db.prepare('SELECT task_id FROM task_lifecycle_reconciliation WHERE task_id=?').get(r.id)),reconciliationReason:(this.db.prepare('SELECT reason FROM task_lifecycle_reconciliation WHERE task_id=?').get(r.id) as {reason:string}|undefined)?.reason??null,title:r.title,owner:r.agent_id??'Unassigned',goal:r.goal_id?{id:r.goal_id,title:r.goal_title}:null,project:r.project_id?{id:r.project_id,title:r.project_title}:null,occurrenceId:r.occurrence_id??null,
-   why:r.why_text??r.description??'Purpose not recorded',state:r.state??(['ready','backlog'].includes(r.status)?'queued':'unverified'),progress:r.progress??(r.status==='complete'?'Completion reported — not yet verified.':'Execution has not been verified.'),nextAction:r.next_action??'Mildred to reconcile the task record.',observedAt:r.observed_at??null,receivedAt:r.received_at??null,source:r.task_id?'Task lifecycle record':'Legacy task record',
-   obstacle:r.obstacle_json?JSON.parse(r.obstacle_json):null,evidence:r.evidence_json?JSON.parse(r.evidence_json):[],reviewer:r.reviewer??null,deliveredAt:r.delivered_at??null,
-   history:this.db.prepare('SELECT * FROM (SELECT revision,kind,summary,observed_at AS observedAt,received_at AS receivedAt FROM task_lifecycle_events WHERE task_id=? ORDER BY revision DESC LIMIT 100) ORDER BY revision').all(r.id)
-  }))};
+  return readTaskSnapshot(this.db);
  }
 }
 
@@ -149,4 +141,22 @@ export function lifecycleEventFromGateway(parsed: ParsedAgentEvent): LifecycleEv
   summary:kind==='start'?'Execution started.':kind==='end'?'Execution ended; output needs review.':kind==='failed'?'Execution reported a failure.':'Execution activity verified.',
   nextAction:'Mildred to supervise the result.',
   ...(kind==='failed'?{obstacle:{reason:'Execution reported a failure.',impact:'The result is not delivered.',waitingOn:'Mildred',nextOwner:'Mildred',recommendation:'Inspect private execution evidence before retrying.',options:['Diagnose the failure','Authorize a retry']}}:{})};
+}
+
+// Read projections never construct TaskLifecycle (its startup performs writes).
+export function readSourceHealth(db: Database.Database) {
+  const source=db.prepare('SELECT state,observed_at AS observedAt,reason FROM task_lifecycle_source WHERE id=1').get() as {state:string;observedAt:number|null;reason:string};
+  const count=(db.prepare('SELECT count(*) AS n FROM task_lifecycle_reconciliation').get() as {n:number}).n;
+  return count?{...source,state:'reconciliation_required',reason:'Execution updates were interrupted or inconsistent. Mildred must reconcile affected tasks; reconnecting alone does not verify them.'}:source;
+}
+export function readTaskSnapshot(db: Database.Database) {
+ return db.transaction(() => {
+  const rows=db.prepare('SELECT t.id,t.title,t.description,t.agent_id,t.status,l.* FROM tasks t LEFT JOIN task_lifecycle l ON l.task_id=t.id ORDER BY t.created_at DESC LIMIT 200').all() as (Row & {id:string;title:string;description:string;agent_id:string|null;status:string})[];
+  return {version:1,checkedAt:Date.now(),sourceHealth:readSourceHealth(db),revision:(db.prepare('SELECT COALESCE(MAX(revision),0) n FROM task_lifecycle_events').get() as {n:number}).n,tasks:rows.map(r=>({
+   id:r.id,reconciliationNeeded:Boolean(db.prepare('SELECT task_id FROM task_lifecycle_reconciliation WHERE task_id=?').get(r.id)),reconciliationReason:(db.prepare('SELECT reason FROM task_lifecycle_reconciliation WHERE task_id=?').get(r.id) as {reason:string}|undefined)?.reason??null,title:r.title,owner:r.agent_id??'Unassigned',goal:r.goal_id?{id:r.goal_id,title:r.goal_title}:null,project:r.project_id?{id:r.project_id,title:r.project_title}:null,occurrenceId:r.occurrence_id??null,
+   why:r.why_text??r.description??'Purpose not recorded',state:r.state??(['ready','backlog'].includes(r.status)?'queued':'unverified'),progress:r.progress??(r.status==='complete'?'Completion reported — not yet verified.':'Execution has not been verified.'),nextAction:r.next_action??'Mildred to reconcile the task record.',observedAt:r.observed_at??null,receivedAt:r.received_at??null,source:r.task_id?'Task lifecycle record':'Legacy task record',
+   obstacle:r.obstacle_json?JSON.parse(r.obstacle_json):null,evidence:r.evidence_json?JSON.parse(r.evidence_json):[],reviewer:r.reviewer??null,deliveredAt:r.delivered_at??null,
+   history:db.prepare('SELECT * FROM (SELECT revision,kind,summary,observed_at AS observedAt,received_at AS receivedAt FROM task_lifecycle_events WHERE task_id=? ORDER BY revision DESC LIMIT 100) ORDER BY revision').all(r.id)
+  }))};
+ })();
 }
