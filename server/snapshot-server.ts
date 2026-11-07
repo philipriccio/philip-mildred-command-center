@@ -8,14 +8,25 @@ import { readTaskSnapshot } from './task-events.js';
  * A separately approved private transport may terminate at its loopback port.
  */
 export function createSnapshotServer(databasePath: string, readToken: string): Server {
-  if (Buffer.byteLength(readToken) < 32 || /[\s\x00-\x1f\x7f]/.test(readToken)) {
-    throw new Error('A dedicated protected read credential is required');
-  }
+  validateReadToken(readToken);
   const db = new Database(databasePath, { readonly: true, fileMustExist: true });
   db.pragma('query_only = ON');
   db.pragma('busy_timeout = 1000');
+  const server=createProjectionServer(readToken,()=>readTaskSnapshot(db));
+  server.on('close',()=>db.close());
+  return server;
+}
+
+function validateReadToken(readToken:string) {
+  if (Buffer.byteLength(readToken) < 32 || /[\s\x00-\x1f\x7f]/.test(readToken)) {
+    throw new Error('A dedicated protected read credential is required');
+  }
+}
+
+export function createProjectionServer(readToken:string,snapshot:()=>unknown|Promise<unknown>):Server {
+  validateReadToken(readToken);
   const expected = Buffer.from(`Bearer ${readToken}`);
-  const server = createServer({ maxHeaderSize: 8192 }, (req, res) => {
+  const server = createServer({ maxHeaderSize: 8192 }, async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -31,7 +42,7 @@ export function createSnapshotServer(databasePath: string, readToken: string): S
       res.setHeader('Connection', 'close'); reply(400, '{"error":"Request body not permitted"}'); return;
     }
     try {
-      const body = JSON.stringify(readTaskSnapshot(db));
+      const body = JSON.stringify(await snapshot());
       if (Buffer.byteLength(body) > 1_000_000) throw new Error('Projection too large');
       reply(200, body);
     } catch {
@@ -42,7 +53,6 @@ export function createSnapshotServer(databasePath: string, readToken: string): S
   server.requestTimeout = 5000;
   server.keepAliveTimeout = 1000;
   server.maxConnections = 16;
-  server.on('close', () => db.close());
   return server;
 }
 
