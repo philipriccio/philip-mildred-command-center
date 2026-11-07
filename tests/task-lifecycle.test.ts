@@ -24,7 +24,6 @@ test('durable lifecycle, adversarial transitions, transaction rollback and resta
  const start=event('start',{runId:'run-1',seq:1});store.ingest('pilot',start,'gateway');
  const before=store.snapshot();assert.equal(before.tasks.find(t=>t.id==='pilot')!.state,'running');
  assert.deepEqual(store.ingest('pilot',start,'gateway'),{duplicate:true});
- assert.deepEqual(store.ingest('pilot',event('progress',{runId:'run-1',seq:0}),'gateway'),{ignored:true});
  assert.equal(store.snapshot().tasks.find(t=>t.id==='pilot')!.observedAt,start.observedAt);
  assert.throws(()=>store.ingest('pilot',event('unknown' as LifecycleEvent['kind']),'supervisor'));
  store.ingest('pilot',event('end',{runId:'run-1',seq:2}),'gateway');assert.equal(store.snapshot().tasks.find(t=>t.id==='pilot')!.state,'waiting');
@@ -171,4 +170,49 @@ test('equal snapshot/supervisor configuration fails closed before localhost bypa
    } finally {await new Promise(resolve=>server.close(resolve));db.close();}
   `],{cwd:new URL('..',import.meta.url),env:{...process.env,NODE_ENV:'test',DATA_DIR:dir,UPLOAD_DIR:join(dir,'uploads'),GATEWAY_TOKEN:'',GITHUB_TOKEN:'',COMMAND_CENTER_AUTH_TOKEN:token,COMMAND_CENTER_SNAPSHOT_TOKEN:token,COMMAND_CENTER_AUTH_EMAILS:''},timeout:10000,stdio:'pipe'});
  } finally {rmSync(dir,{recursive:true,force:true});}
+});
+
+test('source health is independent, interruption persists across restart, reconnect cannot clear it',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'mission-source-'));const path=join(dir,'synthetic.db');let db=new Database(path);
+ try {
+  db.exec(`CREATE TABLE tasks(id TEXT PRIMARY KEY,title TEXT,description TEXT,agent_id TEXT,status TEXT,created_at INTEGER); INSERT INTO tasks VALUES('task','Synthetic source','Proof','dev','ready',1)`);
+  let store=new TaskLifecycle(db);assert.equal(store.snapshot().sourceHealth.state,'unconfigured');assert.equal(store.snapshot().sourceHealth.observedAt,null);
+  store.setSourceStatus('connected');store.link('task',{why:'Source truth',nextAction:'Verify execution'});
+  const now=Date.now()-1000;const event=(kind:LifecycleEvent['kind'],id:string,seq?:number):LifecycleEvent=>({producer:'gateway',id,kind,observedAt:now+(seq??0),runId:'run',seq,summary:'Synthetic',nextAction:'Review'});
+  store.ingest('task',event('bind','bind'),'supervisor');store.ingest('task',event('start','run:1',1),'gateway');
+  const lastActivity=store.snapshot().tasks[0].observedAt;store.setSourceStatus('disconnected');
+  let snapshot=store.snapshot();assert.equal(snapshot.sourceHealth.state,'reconciliation_required');assert.equal(snapshot.tasks[0].reconciliationNeeded,true);assert.equal(snapshot.tasks[0].state,'running');assert.equal(snapshot.tasks[0].observedAt,lastActivity);
+  store.setSourceStatus('connected');assert.equal(store.snapshot().sourceHealth.state,'reconciliation_required');
+  assert.deepEqual(store.ingest('task',event('progress','run:2',2),'gateway'),{reconciliationRequired:true});
+  db.close();db=new Database(path);store=new TaskLifecycle(db);assert.equal(store.snapshot().tasks[0].reconciliationNeeded,true);
+  const proof=[{label:'Synthetic reconciliation',url:'https://example.test/reconciliation'}];
+  assert.throws(()=>store.ingest('task',{...event('review','review'),evidence:proof},'supervisor'));
+  assert.throws(()=>store.ingest('task',event('reconcile','unsafe-clear'),'supervisor'));
+  assert.throws(()=>store.ingest('task',{...event('reconcile','worker-clear'),evidence:proof},'gateway'));
+  store.ingest('task',{...event('reconcile','reconciled'),evidence:proof},'supervisor');
+  snapshot=store.snapshot();assert.equal(snapshot.tasks[0].reconciliationNeeded,false);assert.equal(snapshot.tasks[0].state,'waiting');assert.equal(snapshot.sourceHealth.state,'disconnected');
+  store.ingest('task',{...event('review','reviewed'),evidence:proof},'supervisor');store.ingest('task',event('delivered','delivered'),'supervisor');
+  store.setSourceStatus('disconnected');assert.equal(store.snapshot().tasks[0].reconciliationNeeded,false);assert.equal(store.snapshot().tasks[0].state,'delivered');
+ } finally {db.close();rmSync(dir,{recursive:true,force:true});}
+});
+
+test('reused sequence, backwards sequence, missing start and explicit gap fail closed without guessed replay',()=>{
+ for(const scenario of ['reuse','backwards','missing-start','gap']) {
+  const db=new Database(':memory:');
+  try {
+   db.exec(`CREATE TABLE tasks(id TEXT PRIMARY KEY,title TEXT,description TEXT,agent_id TEXT,status TEXT,created_at INTEGER); INSERT INTO tasks VALUES('task','Synthetic sequence','Proof','dev','ready',1)`);
+   const store=new TaskLifecycle(db);store.setSourceStatus('connected');store.link('task',{why:'Verify source continuity',nextAction:'Observe'});
+   const now=Date.now()-1000;
+   const bind:LifecycleEvent={producer:'gateway',id:'bind',kind:'bind',observedAt:now,runId:'run',summary:'Synthetic bind',nextAction:'Observe'};store.ingest('task',bind,'supervisor');
+   const start:LifecycleEvent={...bind,id:'run:1',kind:'start',seq:1,observedAt:now+1};
+   if(scenario!=='missing-start'){store.ingest('task',start,'gateway');assert.deepEqual(store.ingest('task',start,'gateway'),{duplicate:true});}
+   if(scenario==='reuse') assert.deepEqual(store.ingest('task',{...start,observedAt:now+2},'gateway'),{reconciliationRequired:true});
+   if(scenario==='backwards') assert.deepEqual(store.ingest('task',{...start,id:'run:0',kind:'progress',seq:0,observedAt:now+2},'gateway'),{reconciliationRequired:true});
+   if(scenario==='missing-start') assert.deepEqual(store.ingest('task',{...start,id:'run:2',kind:'progress',seq:2,observedAt:now+2},'gateway'),{reconciliationRequired:true});
+   if(scenario==='gap') store.flagRun('run','The gateway reported missing execution events.');
+   assert.equal(store.snapshot().sourceHealth.state,'reconciliation_required',scenario);assert.equal(store.snapshot().tasks[0].reconciliationNeeded,true,scenario);
+   const revision=store.snapshot().revision;store.flagRun('run','Duplicate gap');assert.equal(store.snapshot().revision,revision);
+   store.setSourceStatus('connected');assert.equal(store.snapshot().tasks[0].reconciliationNeeded,true);
+  } finally {db.close();}
+ }
 });

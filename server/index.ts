@@ -2659,6 +2659,7 @@ function initGateway() {
 
   gateway.onStatus((status, error) => {
     const connected = status === 'connected' ? 1 : 0;
+    lifecycle.setSourceStatus(status === 'connected' ? 'connected' : 'disconnected');
     db.prepare('UPDATE status SET gateway_connected = ?, last_update = ? WHERE id = 1').run(connected, Date.now());
 
     // Broadcast connection status to all frontend clients
@@ -2754,6 +2755,11 @@ function initGateway() {
 
   // Forward all gateway events to frontend
   gateway.onEvent((event, payload) => {
+    lifecycle.noteSourceActivity();
+    if((event==='agent'||event==='agent.event') && payload && typeof payload==='object') {
+      const fact=payload as {runId?:unknown;stream?:unknown;data?:{reason?:unknown}};
+      if(typeof fact.runId==='string' && fact.stream==='error' && fact.data?.reason==='seq gap') lifecycle.flagRun(fact.runId,'The gateway reported missing execution events; automatic updates are paused until reconciliation.');
+    }
     broadcastUpdate({ type: `gateway.${event}`, data: payload });
   });
 

@@ -18,3 +18,13 @@ CREATE TABLE IF NOT EXISTS task_lifecycle_events (
  UNIQUE(producer,event_id)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS task_single_delivery ON task_lifecycle_events(task_id) WHERE kind='delivered';
+
+CREATE TABLE IF NOT EXISTS task_lifecycle_source (
+ id INTEGER PRIMARY KEY CHECK(id=1), state TEXT NOT NULL,
+ observed_at INTEGER, reason TEXT NOT NULL
+);
+INSERT OR IGNORE INTO task_lifecycle_source VALUES(1,'unconfigured',NULL,'Execution updates are not connected.');
+CREATE TABLE IF NOT EXISTS task_lifecycle_reconciliation (
+ task_id TEXT PRIMARY KEY REFERENCES tasks(id) ON DELETE CASCADE,
+ reason TEXT NOT NULL, detected_at INTEGER NOT NULL
+);
