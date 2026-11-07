@@ -85,6 +85,7 @@ interface AgentEventPayload {
   ts: number;
   data: Record<string, unknown>;
   sessionKey?: string;
+  agentId?: string;
 }
 
 export type AgentVisualStatus =
@@ -107,6 +108,10 @@ export interface AgentState {
 }
 
 export interface ParsedAgentEvent {
+  seq: number;
+  observedAt: number;
+  stream: string;
+  phase: string | null;
   agentId: string;
   runId: string;
   sessionKey?: string;
@@ -304,8 +309,8 @@ export class GatewayClient {
     // Challenge-response auth
     if (frame.event === 'connect.challenge') {
       const payload = frame.payload as { nonce?: string } | null;
-      const nonce = payload?.nonce ?? '';
-      this.sendConnectRequest(nonce);
+      void payload; // Current connect API does not accept a nonce argument.
+      this.sendConnectRequest();
       return;
     }
 
@@ -467,6 +472,13 @@ export class GatewayClient {
     const known = this.runIdMap.get(event.runId);
     if (known) return known;
 
+    // Current gateway emits agentId at envelope level, including native sessions
+    // whose session key does not use the legacy agent:<id>:... shape.
+    if (typeof event.agentId === 'string' && event.agentId.trim()) {
+      this.runIdMap.set(event.runId, event.agentId);
+      return event.agentId;
+    }
+
     // Try to extract from sessionKey (format: "agent:<id>:...")
     if (event.sessionKey) {
       const match = event.sessionKey.match(/^agent:([^:]+)/);
@@ -491,6 +503,8 @@ export class GatewayClient {
 
   private parseEvent(agentId: string, event: AgentEventPayload): ParsedAgentEvent {
     const base: ParsedAgentEvent = {
+      seq: event.seq, observedAt: event.ts, stream: event.stream,
+      phase: typeof event.data.phase === "string" ? event.data.phase : null,
       agentId,
       runId: event.runId,
       sessionKey: event.sessionKey,
@@ -509,6 +523,9 @@ export class GatewayClient {
         } else if (phase === 'end') {
           base.status = 'idle';
           base.summary = 'Run ended';
+        } else if (phase === 'error') {
+          base.status = 'error';
+          base.summary = 'Run failed';
         } else if (phase === 'fallback') {
           base.status = 'error';
           base.summary = 'Fallback triggered';

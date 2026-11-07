@@ -1,3 +1,5 @@
+import { timingSafeEqual } from 'node:crypto';
+import { TaskLifecycle, lifecycleEventFromGateway, type LifecycleEvent } from './task-events.js';
 import express, { type Request, type Response } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -24,6 +26,7 @@ const FRONTEND_ORIGINS = (process.env.FRONTEND_ORIGINS ?? 'http://localhost:5173
   .filter(Boolean);
 const ENABLE_PUBLIC_DASHBOARD_TUNNEL = process.env.ENABLE_PUBLIC_DASHBOARD_TUNNEL === '1';
 const COMMAND_CENTER_AUTH_TOKEN = process.env.COMMAND_CENTER_AUTH_TOKEN ?? '';
+const COMMAND_CENTER_SNAPSHOT_TOKEN = process.env.COMMAND_CENTER_SNAPSHOT_TOKEN ?? '';
 const COMMAND_CENTER_AUTH_EMAILS = (process.env.COMMAND_CENTER_AUTH_EMAILS ?? '')
   .split(',')
   .map((email) => email.trim().toLowerCase())
@@ -250,7 +253,7 @@ interface ActivityEntry {
   timestamp: number;
   agentId: string;
   agentName: string;
-  eventType: 'thinking' | 'tool_call' | 'speaking' | 'idle' | 'error';
+  eventType: 'thinking' | 'tool_call' | 'speaking' | 'idle' | 'error' | 'offline';
   tool: string | null;
   summary: string;
 }
@@ -324,7 +327,19 @@ function isAuthorizedRequest(req: Request) {
   return isAllowedAuthenticatedEmail(extractProxyAuthenticatedEmail(req));
 }
 
+function tokenMatches(supplied: string, expected: string): boolean {
+  const a=Buffer.from(supplied), b=Buffer.from(expected);
+  return b.length > 0 && a.length === b.length && timingSafeEqual(a,b);
+}
 function requireAuth(req: Request, res: Response, next: () => void) {
+  // Read credentials never inherit legacy localhost or forwarded-email write access.
+  // req.path is relative to the /api middleware mount.
+  if (tokenMatches(extractAuthToken(req), COMMAND_CENTER_SNAPSHOT_TOKEN)) {
+    if (COMMAND_CENTER_SNAPSHOT_TOKEN !== COMMAND_CENTER_AUTH_TOKEN && req.method === 'GET' && req.path === '/mission-control') {
+      next(); return;
+    }
+    res.status(401).json({error:'Unauthorized'}); return;
+  }
   if (isAuthorizedRequest(req)) {
     next();
     return;
@@ -742,17 +757,44 @@ for (const agent of officeDefaultAgents) {
 
 const octokit = process.env.GITHUB_TOKEN ? new Octokit({ auth: process.env.GITHUB_TOKEN }) : null;
 
-const selectTaskById = db.prepare<TaskRow>('SELECT * FROM tasks WHERE id = ?');
-const selectLaneById = db.prepare<LaneRow>('SELECT * FROM lanes WHERE id = ?');
-const selectAgentById = db.prepare<AgentRow>('SELECT * FROM agents WHERE id = ?');
-const selectEvidenceByTask = db.prepare<EvidenceRow>('SELECT * FROM evidence WHERE task_id = ? ORDER BY uploaded_at DESC');
-const selectApprovalsByTask = db.prepare<ApprovalRow>('SELECT * FROM approvals WHERE task_id = ? ORDER BY decided_at DESC');
-const selectPrsByTask = db.prepare<PrTrackingRow>('SELECT * FROM pr_tracking WHERE task_id = ? ORDER BY last_checked DESC');
-const selectEventsByTask = db.prepare<TaskEventRow>('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at DESC');
-const selectOfficeAgentById = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE id = ?');
-const selectLatestOfficeReportByTaskId = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE task_id = ? ORDER BY completed_at DESC LIMIT 1');
-const selectProjectById = db.prepare<ProjectRow>('SELECT * FROM projects WHERE id = ?');
-const selectWorkItemById = db.prepare<WorkItemRow>('SELECT * FROM work_items WHERE id = ?');
+const selectTaskById = db.prepare<unknown[], TaskRow>('SELECT * FROM tasks WHERE id = ?');
+const selectLaneById = db.prepare<unknown[], LaneRow>('SELECT * FROM lanes WHERE id = ?');
+const selectAgentById = db.prepare<unknown[], AgentRow>('SELECT * FROM agents WHERE id = ?');
+const selectEvidenceByTask = db.prepare<unknown[], EvidenceRow>('SELECT * FROM evidence WHERE task_id = ? ORDER BY uploaded_at DESC');
+const selectApprovalsByTask = db.prepare<unknown[], ApprovalRow>('SELECT * FROM approvals WHERE task_id = ? ORDER BY decided_at DESC');
+const selectPrsByTask = db.prepare<unknown[], PrTrackingRow>('SELECT * FROM pr_tracking WHERE task_id = ? ORDER BY last_checked DESC');
+const selectEventsByTask = db.prepare<unknown[], TaskEventRow>('SELECT * FROM task_events WHERE task_id = ? ORDER BY created_at DESC');
+const selectOfficeAgentById = db.prepare<unknown[], OfficeAgentRow>('SELECT * FROM office_agents WHERE id = ?');
+const selectLatestOfficeReportByTaskId = db.prepare<unknown[], OfficeReportRow>('SELECT * FROM office_reports WHERE task_id = ? ORDER BY completed_at DESC LIMIT 1');
+const selectProjectById = db.prepare<unknown[], ProjectRow>('SELECT * FROM projects WHERE id = ?');
+const selectWorkItemById = db.prepare<unknown[], WorkItemRow>('SELECT * FROM work_items WHERE id = ?');
+
+const lifecycle = new TaskLifecycle(db);
+// This narrow service boundary never trusts hostname or forwarded identity headers.
+// Existing service token is required even on localhost; no new auth configuration is applied.
+function requireLifecycleService(req: Request, res: Response, next: () => void) {
+  const supplied=Buffer.from(extractAuthToken(req)), expected=Buffer.from(COMMAND_CENTER_AUTH_TOKEN);
+  if (!expected.length || supplied.length!==expected.length || !timingSafeEqual(supplied,expected)) {
+    res.status(401).json({error:'Unauthorized'}); return;
+  }
+  res.setHeader('Cache-Control','no-store'); next();
+}
+function requireLifecycleSnapshot(req: Request, res: Response, next: () => void) {
+  if (COMMAND_CENTER_SNAPSHOT_TOKEN !== COMMAND_CENTER_AUTH_TOKEN && tokenMatches(extractAuthToken(req), COMMAND_CENTER_SNAPSHOT_TOKEN)) {
+    res.setHeader('Cache-Control','no-store'); next(); return;
+  }
+  requireLifecycleService(req,res,next);
+}
+app.get('/api/mission-control', requireLifecycleSnapshot, (_req,res) => res.json(lifecycle.snapshot()));
+app.post('/api/tasks/:id/lifecycle/link', requireLifecycleService, (req,res) => {
+  try { lifecycle.link(String(req.params.id),req.body); res.status(201).json({ok:true}); }
+  catch { res.status(409).json({error:'Invalid or conflicting task link'}); }
+});
+// Supervisor-only integration contract. A worker/gateway has no access to this credential.
+app.post('/api/tasks/:id/lifecycle', requireLifecycleService, (req,res) => {
+  try { res.json(lifecycle.ingest(String(req.params.id),req.body as LifecycleEvent,'supervisor')); }
+  catch { res.status(409).json({error:'Invalid or conflicting lifecycle transition'}); }
+});
 
 const activityBuffer: ActivityEntry[] = [];
 const MAX_ACTIVITY_ENTRIES = 100;
@@ -822,8 +864,8 @@ function getWorkItemOr404(res: Response, id: string) {
 function readProjectDetail(id: string) {
   const project = selectProjectById.get(id);
   if (!project) return null;
-  const work_items = db.prepare<WorkItemRow>('SELECT * FROM work_items WHERE project_id = ? ORDER BY priority ASC, updated_at DESC').all(id);
-  const cron_job_ids = db.prepare<{ cron_job_id: string }>('SELECT cron_job_id FROM project_cron_links WHERE project_id = ? ORDER BY cron_job_id ASC').all(id).map((row) => row.cron_job_id);
+  const work_items = db.prepare<unknown[], WorkItemRow>('SELECT * FROM work_items WHERE project_id = ? ORDER BY priority ASC, updated_at DESC').all(id);
+  const cron_job_ids = db.prepare<unknown[], { cron_job_id: string }>('SELECT cron_job_id FROM project_cron_links WHERE project_id = ? ORDER BY cron_job_id ASC').all(id).map((row) => row.cron_job_id);
   const cockpit = project.id === 'selftape'
     ? buildSelfTapeCockpit(project, work_items)
     : buildGenericCockpit(project, work_items);
@@ -1144,8 +1186,189 @@ function buildSelfTapeCockpit(project: ProjectRow, workItems: WorkItemRow[]) {
   };
 }
 
+function getTaskOr404(res: Response, id: string) {
+  const task = selectTaskById.get(id);
+  if (!task) {
+    res.status(404).json({ error: 'Task not found' });
+    return null;
+  }
+  return task;
+}
+
+function readTaskDetail(id: string) {
+  const task = selectTaskById.get(id);
+  if (!task) return null;
+  return {
+    ...task,
+    agent: task.agent_id ? selectAgentById.get(task.agent_id) ?? null : null,
+    lane: task.lane_id ? selectLaneById.get(task.lane_id) ?? null : null,
+    evidence: selectEvidenceByTask.all(id),
+    approvals: selectApprovalsByTask.all(id),
+    prs: selectPrsByTask.all(id),
+    office_report: selectLatestOfficeReportByTaskId.get(id) ?? null,
+    history: selectEventsByTask.all(id).map(event => ({
+      ...event,
+      details: parseJson<JsonObject>(event.details_json),
+    })),
+  };
+}
+
+function syncAgentCurrentTask(agentId: string | null, taskId: string | null) {
+  if (!agentId) return;
+  db.prepare('UPDATE agents SET current_task_id = ? WHERE id = ?').run(taskId, agentId);
+}
+
+function deriveOfficeState(task: TaskRow | null) {
+  return { officeState: task?.blocker_reason ? 'blocked' : 'idle', taskProgress: 0, taskTitle: task?.title ?? null };
+}
+
+function syncOfficeAgentForTask(task: TaskRow) {
+  if (!task.agent_id) return;
+  const officeAgent = selectOfficeAgentById.get(task.agent_id);
+  if (!officeAgent) return;
+  const live = liveAgentActivity.get(task.agent_id);
+  const liveIsFresh = live ? Date.now() - live.lastSeen < LIVE_AGENT_ACTIVITY_TTL_MS : false;
+  const derived = deriveOfficeState(task);
+  const officeState = liveIsFresh ? live!.officeState : derived.officeState;
+  const taskTitle = liveIsFresh ? live!.taskLabel : derived.taskTitle;
+  const taskProgress = liveIsFresh ? Math.max(derived.taskProgress, 65) : derived.taskProgress;
+  db.prepare('UPDATE office_agents SET state = ?, current_task = ?, task_progress = ? WHERE id = ?')
+    .run(officeState, taskTitle, taskProgress, task.agent_id);
+  broadcastToTopics(['office', 'all'], {
+    type: 'agent.state',
+    agentId: task.agent_id,
+    state: officeState,
+    task: taskTitle,
+    progress: taskProgress,
+  });
+}
+
+function upsertOfficeReport(task: TaskRow, options?: { forceApproved?: boolean; reviewedBy?: string | null; approvedBy?: string | null }) {
+  if (!task.agent_id) return null;
+  const officeAgent = selectOfficeAgentById.get(task.agent_id);
+  if (!officeAgent) return null;
+  const lane = task.lane_id ? selectLaneById.get(task.lane_id) : null;
+  const existing = selectLatestOfficeReportByTaskId.get(task.id);
+  const now = Date.now();
+  const autoApproved = Boolean(options?.forceApproved);
+  const reviewStatus = autoApproved ? 'approved' : 'pending';
+  const reviewedBy = autoApproved ? (options?.reviewedBy ?? 'Mildred') : null;
+  const approvedBy = autoApproved ? (options?.approvedBy ?? 'Mildred') : null;
+
+  if (existing) {
+    db.prepare(`
+      UPDATE office_reports
+      SET agent_id = ?,
+          agent_name = ?,
+          task_title = ?,
+          summary = ?,
+          lane_name = ?,
+          model_used = ?,
+          completed_at = ?,
+          review_status = CASE WHEN ? = 1 THEN 'approved' ELSE COALESCE(review_status, 'pending') END,
+          reviewed_by = CASE WHEN ? = 1 THEN ? ELSE reviewed_by END,
+          reviewed_at = CASE WHEN ? = 1 THEN ? ELSE reviewed_at END,
+          approved_by = CASE WHEN ? = 1 THEN ? ELSE approved_by END,
+          approved_at = CASE WHEN ? = 1 THEN ? ELSE approved_at END
+      WHERE id = ?
+    `).run(
+      task.agent_id, officeAgent.name, task.title, task.completion_summary || task.delivery_notes || task.request_summary || null,
+      lane?.name ?? null, task.model_used ?? null, now,
+      autoApproved ? 1 : 0, autoApproved ? 1 : 0, reviewedBy, autoApproved ? 1 : 0, now, autoApproved ? 1 : 0, approvedBy, autoApproved ? 1 : 0, now, existing.id,
+    );
+    return db.prepare<unknown[], OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(existing.id) ?? null;
+  }
+
+  const reportId = createId('report');
+  db.prepare(`
+    INSERT INTO office_reports (
+      id, task_id, agent_id, agent_name, task_title, summary, lane_name, model_used,
+      completed_at, acknowledged, review_status, reviewed_by, reviewed_at, approved_by, approved_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+  `).run(
+    reportId, task.id, task.agent_id, officeAgent.name, task.title,
+    task.completion_summary || task.delivery_notes || task.request_summary || null,
+    lane?.name ?? null, task.model_used ?? null, now, reviewStatus, reviewedBy, reviewedBy ? now : null, approvedBy, approvedBy ? now : null,
+  );
+  const report = db.prepare<unknown[], OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(reportId) ?? null;
+  broadcastToTopics(['office', 'all'], { type: 'report.new', report });
+  return report;
+}
+
+function recordTaskEvent(taskId: string, eventType: string, actor: string, summary: string, details?: JsonObject) {
+  const event = {
+    id: createId('evt'),
+    task_id: taskId,
+    event_type: eventType,
+    actor,
+    summary,
+    details_json: details ? JSON.stringify(details) : null,
+    created_at: Date.now(),
+  };
+  db.prepare(`
+    INSERT INTO task_events (id, task_id, event_type, actor, summary, details_json, created_at)
+    VALUES (@id, @task_id, @event_type, @actor, @summary, @details_json, @created_at)
+  `).run(event);
+  broadcastUpdate({
+    type: 'task_event',
+    data: {
+      ...event,
+      details: details ?? null,
+    },
+  });
+}
+
+function broadcastTask(type: string, taskId: string) {
+  const detail = readTaskDetail(taskId);
+  if (detail) {
+    broadcastUpdate({ type, data: detail });
+  }
+}
+
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now(), frontendOrigins: FRONTEND_ORIGINS });
+});
+
+app.get('/api/agents', (_req, res) => {
+  const agents = db.prepare<unknown[], AgentRow>('SELECT * FROM agents ORDER BY name').all();
+  res.json(agents);
+});
+
+app.get('/api/tasks', (_req, res) => {
+  const tasks = db.prepare(`
+    SELECT t.*, a.name AS agent_name, l.name AS lane_name, l.color AS lane_color
+    FROM tasks t
+    LEFT JOIN agents a ON a.id = t.agent_id
+    LEFT JOIN lanes l ON l.id = t.lane_id
+    ORDER BY CASE t.status
+      WHEN 'in_progress' THEN 1
+      WHEN 'verification' THEN 2
+      WHEN 'ready' THEN 3
+      WHEN 'backlog' THEN 4
+      WHEN 'complete' THEN 5
+      ELSE 6
+    END, t.updated_at DESC
+  `).all();
+  res.json(tasks);
+});
+
+app.get('/api/tasks/:id', (req, res) => {
+  const task = readTaskDetail(req.params.id);
+  if (!task) {
+    res.status(404).json({ error: 'Task not found' });
+    return;
+  }
+  res.json(task);
+});
+
+app.get('/api/status', (_req, res) => {
+  const status = db.prepare('SELECT * FROM status WHERE id = 1').get();
+  res.json(status);
+});
+
+
 app.get('/api/projects', (_req, res) => {
-  const projects = db.prepare<ProjectRow & { open_work_items_count: number; work_items_count: number }>(`
+  const projects = db.prepare<unknown[], ProjectRow & { open_work_items_count: number; work_items_count: number }>(`
     SELECT p.*,
       COALESCE(SUM(CASE WHEN wi.status != 'done' THEN 1 ELSE 0 END), 0) AS open_work_items_count,
       COUNT(wi.id) AS work_items_count
@@ -1318,7 +1541,7 @@ app.post('/api/tasks', (req, res) => {
 });
 
 app.put('/api/tasks/:id', (req, res) => {
-  const existing = getTaskOr404(res, req.params.id);
+  const existing = getTaskOr404(res, String(req.params.id));
   if (!existing) return;
   const payload = req.body as Partial<TaskRow>;
   const nextStatus = payload.status ? normalizeStatus(payload.status, existing.status) : existing.status;
@@ -1389,9 +1612,9 @@ app.put('/api/tasks/:id', (req, res) => {
 });
 
 app.delete('/api/tasks/:id', (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
-  const evidenceFiles = db.prepare<EvidenceRow>('SELECT * FROM evidence WHERE task_id = ?').all(task.id);
+  const evidenceFiles = db.prepare<unknown[], EvidenceRow>('SELECT * FROM evidence WHERE task_id = ?').all(task.id);
   for (const evidence of evidenceFiles) {
     try {
       fs.unlinkSync(path.join(uploadsDir, evidence.filename));
@@ -1406,7 +1629,7 @@ app.delete('/api/tasks/:id', (req, res) => {
 });
 
 app.post('/api/tasks/:id/assign', (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   const agentId = typeof req.body.agent_id === 'string' ? req.body.agent_id : null;
   if (task.agent_id && task.agent_id !== agentId) {
@@ -1423,7 +1646,7 @@ app.post('/api/tasks/:id/assign', (req, res) => {
 });
 
 app.post('/api/tasks/:id/move', (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   const nextStatus = normalizeStatus(req.body.status, task.status);
   db.prepare('UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?').run(nextStatus, Date.now(), task.id);
@@ -1446,7 +1669,7 @@ app.get('/api/tasks/:id/evidence', (req, res) => {
 });
 
 app.post('/api/tasks/:id/evidence', upload.single('file'), (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   if (!req.file) {
     res.status(400).json({ error: 'No file uploaded' });
@@ -1461,13 +1684,13 @@ app.post('/api/tasks/:id/evidence', upload.single('file'), (req, res) => {
     evidence_id: evidenceId,
     original_name: req.file.originalname,
   });
-  const evidence = db.prepare<EvidenceRow>('SELECT * FROM evidence WHERE id = ?').get(evidenceId);
+  const evidence = db.prepare<unknown[], EvidenceRow>('SELECT * FROM evidence WHERE id = ?').get(evidenceId);
   broadcastUpdate({ type: 'evidence_uploaded', data: evidence });
   res.status(201).json(evidence);
 });
 
 app.get('/api/evidence/:id/download', (req, res) => {
-  const evidence = db.prepare<EvidenceRow>('SELECT * FROM evidence WHERE id = ?').get(req.params.id);
+  const evidence = db.prepare<unknown[], EvidenceRow>('SELECT * FROM evidence WHERE id = ?').get(req.params.id);
   if (!evidence) {
     res.status(404).json({ error: 'Evidence not found' });
     return;
@@ -1483,7 +1706,7 @@ app.get('/api/evidence/:id/download', (req, res) => {
 });
 
 app.delete('/api/evidence/:id', (req, res) => {
-  const evidence = db.prepare<EvidenceRow>('SELECT * FROM evidence WHERE id = ?').get(req.params.id);
+  const evidence = db.prepare<unknown[], EvidenceRow>('SELECT * FROM evidence WHERE id = ?').get(req.params.id);
   if (evidence) {
     try {
       fs.unlinkSync(path.join(uploadsDir, evidence.filename));
@@ -1508,11 +1731,11 @@ function createApproval(taskId: string, decision: ApprovalDecision, notes: strin
     INSERT INTO approvals (id, task_id, decision, notes, decided_by, decided_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(approvalId, taskId, decision, notes, decidedBy, now);
-  return db.prepare<ApprovalRow>('SELECT * FROM approvals WHERE id = ?').get(approvalId);
+  return db.prepare<unknown[], ApprovalRow>('SELECT * FROM approvals WHERE id = ?').get(approvalId);
 }
 
 app.post('/api/tasks/:id/approve', (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   const notes = typeof req.body.notes === 'string' ? req.body.notes : null;
   const decidedBy = typeof req.body.decided_by === 'string' ? req.body.decided_by : 'Philip';
@@ -1529,7 +1752,7 @@ app.post('/api/tasks/:id/approve', (req, res) => {
 });
 
 app.post('/api/tasks/:id/request-changes', (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   const notes = typeof req.body.notes === 'string' ? req.body.notes : null;
   const decidedBy = typeof req.body.decided_by === 'string' ? req.body.decided_by : 'Philip';
@@ -1545,7 +1768,7 @@ app.post('/api/tasks/:id/request-changes', (req, res) => {
 });
 
 app.post('/api/tasks/:id/send-back', (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   const notes = typeof req.body.notes === 'string' ? req.body.notes : null;
   const decidedBy = typeof req.body.decided_by === 'string' ? req.body.decided_by : 'Philip';
@@ -1565,7 +1788,7 @@ app.get('/api/tasks/:id/pr', (req, res) => {
 });
 
 app.post('/api/tasks/:id/pr', async (req, res) => {
-  const task = getTaskOr404(res, req.params.id);
+  const task = getTaskOr404(res, String(req.params.id));
   if (!task) return;
   const { pr_url, pr_number, owner, repo } = req.body as { pr_url?: string; pr_number?: number; owner?: string; repo?: string };
   let prNum = pr_number;
@@ -1606,7 +1829,7 @@ app.post('/api/tasks/:id/pr', async (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(prId, task.id, prNum, pr_url || `https://github.com/${owner}/${repo}/pull/${prNum}`, prStatus, ciStatus, now);
   recordTaskEvent(task.id, 'pr_linked', 'Mildred', `Linked PR #${prNum}`, { pr_number: prNum, pr_url: pr_url ?? null, owner: owner ?? null, repo: repo ?? null });
-  const pr = db.prepare<PrTrackingRow>('SELECT * FROM pr_tracking WHERE id = ?').get(prId);
+  const pr = db.prepare<unknown[], PrTrackingRow>('SELECT * FROM pr_tracking WHERE id = ?').get(prId);
   broadcastUpdate({ type: 'pr_linked', data: pr });
   res.status(201).json(pr);
 });
@@ -1644,7 +1867,7 @@ app.post('/api/tasks/:id/pr/refresh', async (req, res) => {
 });
 
 app.delete('/api/pr/:id', (req, res) => {
-  const pr = db.prepare<PrTrackingRow>('SELECT * FROM pr_tracking WHERE id = ?').get(req.params.id);
+  const pr = db.prepare<unknown[], PrTrackingRow>('SELECT * FROM pr_tracking WHERE id = ?').get(req.params.id);
   if (pr) {
     recordTaskEvent(pr.task_id, 'pr_unlinked', 'Mildred', `Unlinked PR #${pr.pr_number}`);
   }
@@ -1663,7 +1886,7 @@ app.get('/api/tasks/:id/history', (req, res) => {
 });
 
 app.get('/api/lanes', (_req, res) => {
-  const lanes = db.prepare<LaneRow>('SELECT * FROM lanes ORDER BY name').all();
+  const lanes = db.prepare<unknown[], LaneRow>('SELECT * FROM lanes ORDER BY name').all();
   res.json(lanes);
 });
 
@@ -1939,7 +2162,7 @@ async function resolveSelfTapeRestAuthKey(config: ReturnType<typeof getSelfTapeS
   }
 }
 
-function emptyDiagnosticSummary() {
+function emptyDiagnosticSummary(): DiagnosticEventsResponse['summary'] {
   return {
     total: 0,
     critical: 0,
@@ -2150,7 +2373,7 @@ app.get('/api/dashboard/stats', (_req, res) => {
   const now = Date.now();
   const in48h = now + 48 * 60 * 60 * 1000;
   const in24h = now + 24 * 60 * 60 * 1000;
-  const allTasks = db.prepare<TaskRow>('SELECT * FROM tasks').all();
+  const allTasks = db.prepare<unknown[], TaskRow>('SELECT * FROM tasks').all();
   const byStatus = {
     backlog: allTasks.filter(task => task.status === 'backlog').length,
     ready: allTasks.filter(task => task.status === 'ready').length,
@@ -2163,7 +2386,7 @@ app.get('/api/dashboard/stats', (_req, res) => {
   const dueVerySoon = allTasks.filter(task => task.deadline && task.deadline >= now && task.deadline <= in24h && task.status !== 'complete').length;
   const blocked = allTasks.filter(task => task.blocker_reason).length;
   const activeAgents = db.prepare("SELECT * FROM agents WHERE status != 'idle'").all().length;
-  const lanes = db.prepare<LaneRow>('SELECT * FROM lanes').all();
+  const lanes = db.prepare<unknown[], LaneRow>('SELECT * FROM lanes').all();
   const laneStats = lanes.map(lane => {
     const laneTasks = allTasks.filter(task => task.lane_id === lane.id);
     const completed = laneTasks.filter(task => task.status === 'complete').length;
@@ -2208,7 +2431,7 @@ const server = createServer(app);
 
 app.get('/api/office/agents', (_req, res) => {
   const now = Date.now();
-  const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all().map((agent) => {
+  const agents = db.prepare<unknown[], OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all().map((agent) => {
     const live = liveAgentActivity.get(agent.id);
     if (live && now - live.lastSeen < LIVE_AGENT_ACTIVITY_TTL_MS) {
       return { ...agent, state: live.officeState, current_task: live.taskLabel };
@@ -2257,7 +2480,7 @@ app.post('/api/office/agents/:id/move', (req, res) => {
 
 app.get('/api/office/reports', (req, res) => {
   const includePending = req.query.includePending === '1';
-  const reports = db.prepare<OfficeReportRow>(`SELECT * FROM office_reports ${includePending ? '' : "WHERE review_status = 'approved'"} ORDER BY completed_at DESC`).all();
+  const reports = db.prepare<unknown[], OfficeReportRow>(`SELECT * FROM office_reports ${includePending ? '' : "WHERE review_status = 'approved'"} ORDER BY completed_at DESC`).all();
   res.json({ reports });
 });
 
@@ -2279,7 +2502,7 @@ app.post('/api/office/report', (req, res) => {
 
 
 app.post('/api/office/report/:id/approve', (req, res) => {
-  const report = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(req.params.id);
+  const report = db.prepare<unknown[], OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(req.params.id);
   if (!report) {
     res.status(404).json({ error: 'Report not found' });
     return;
@@ -2295,7 +2518,7 @@ app.post('/api/office/report/:id/approve', (req, res) => {
         approved_at = ?
     WHERE id = ?
   `).run(approver, now, approver, now, report.id);
-  const updated = db.prepare<OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(report.id);
+  const updated = db.prepare<unknown[], OfficeReportRow>('SELECT * FROM office_reports WHERE id = ?').get(report.id);
   broadcastToTopics(['office', 'all'], { type: 'report.updated', report: updated });
   res.json(updated);
 });
@@ -2349,7 +2572,7 @@ wss.on('connection', (ws, req) => {
 
   clientSubs.set(ws, new Set(['all']));
 
-  const agents = db.prepare<OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
+  const agents = db.prepare<unknown[], OfficeAgentRow>('SELECT * FROM office_agents WHERE office_enabled = 1').all();
   ws.send(JSON.stringify({ type: 'office.init', agents }));
   ws.send(JSON.stringify({ type: 'activity.recent', entries: getRecentActivity() }));
 
@@ -2450,6 +2673,14 @@ function initGateway() {
   });
 
   gateway.onAgentEvent((parsed: ParsedAgentEvent) => {
+    // No task inference from agent availability or current_task_id. Binding is mandatory.
+    const bound=db.prepare('SELECT task_id FROM task_lifecycle WHERE run_id=? AND producer=?').get(parsed.runId,'gateway') as {task_id:string}|undefined;
+    const lifecycleEvent = lifecycleEventFromGateway(parsed);
+    if(bound && lifecycleEvent) {
+      try { lifecycle.ingest(bound.task_id,lifecycleEvent,'gateway'); }
+      catch { console.warn('[TaskLifecycle] Rejected unverified or conflicting event'); }
+    }
+
     const now = Date.now();
     const officeState = mapVisualStatusToOffice(parsed.status);
 
@@ -2616,7 +2847,8 @@ app.get('/api/inbox/:id/download', (req, res) => {
   fs.createReadStream(item.file_path).pipe(res);
 });
 
-server.listen(PORT, () => {
+// Tests exercise Express directly without opening a listener or connecting a gateway.
+if (process.env.NODE_ENV !== 'test') server.listen(PORT, () => {
   console.log(`Command Center API running on port ${PORT}`);
   console.log(`Frontend origins: ${FRONTEND_ORIGINS.join(', ')}`);
   console.log(`Auth: ${REQUIRE_AUTH ? 'required' : 'disabled/local-dev'}`);
