@@ -56,10 +56,10 @@ export async function createGatewayActivityReader<T extends object>(taskSnapshot
    const executing=(m.role==='assistant'&&m.stopReason==='toolUse')||m.role==='toolResult';
    if(!ending&&(!executing||p.hasActiveRun!==true||p.status!=='running'))return;
    const id=identity(p.agentId,p.sessionKey,meta.runId),seq=meta.seq as number;
+   if(terminal.has(id)||seq<=(messageSequences.get(id)??0))return;
    // A newly executing native turn supersedes older evidence for this same session.
    // Other sessions (and their simultaneous work) remain untouched.
    if(!ending)for(const [oldId,item] of evidence)if(item.agent===p.agentId&&item.key===p.sessionKey&&item.run!==meta.runId&&item.ts<=(meta.recordTimestampMs as number))evidence.delete(oldId);
-   if(seq<=(messageSequences.get(id)??0))return;
    messageSequences.set(id,seq);if(messageSequences.size>2000)messageSequences.delete(messageSequences.keys().next().value!);
    onEvent({event:'sessions.changed',payload:{agentId:p.agentId,sessionKey:p.sessionKey,runId:meta.runId,ts:meta.recordTimestampMs,phase:ending?'end':'start'}});
    return;
