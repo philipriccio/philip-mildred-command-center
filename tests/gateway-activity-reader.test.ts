@@ -31,6 +31,8 @@ test('native committed execution metadata proves work without reading content',a
  emit('assistant','toolUse',{timestamp:1});await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'unknown');
  emit();await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'working');
  emit('toolResult');await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'working');
- emit('assistant','stop');await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'unknown');
+ emit('assistant','stop');await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'working');
+ emit('toolResult');await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'working');
+ emit('assistant','stop',{__openclaw:{runId:'native-turn',recordTimestampMs:100000,seq:seq++,mirrorOrigin:'codex-app-server',runTerminal:true}});await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'unknown');
  emit('toolResult');await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'unknown');
  }finally{f.reader.close();}});

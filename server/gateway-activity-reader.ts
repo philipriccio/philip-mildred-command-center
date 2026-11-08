@@ -30,7 +30,7 @@ export async function createGatewayActivityReader<T extends object>(taskSnapshot
    let result:unknown;try{result=await Promise.race([client.request(method,params),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(Error('Activity read timeout')),3500);})]);}finally{if(timer)clearTimeout(timer);}
    if(epoch!==generation||!authorized)throw Error('Activity connection changed');
    if(method==='sessions.list'&&object(result)&&Array.isArray(result.sessions))for(const row of result.sessions){
-    if(!object(row)||!agent(row.agentId)||typeof row.key!=='string'||row.hasActiveRun!==false||row.agentId!==params.agentId)continue;
+    if(!object(row)||!agent(row.agentId)||typeof row.key!=='string'||(row.hasActiveRun!==false&&row.status!=='queued')||row.agentId!==params.agentId)continue;
     for(const [id,item] of evidence)if(item.agent===row.agentId&&item.key===row.key&&item.revision<=requestRevision)evidence.delete(id);
    }
    return result;
@@ -52,10 +52,13 @@ export async function createGatewayActivityReader<T extends object>(taskSnapshot
    if(p.runId!==undefined&&p.runId!==meta.runId)return;
    for(const ts of [m.timestamp,meta.recordTimestampMs])if(typeof ts!=='number'||!Number.isSafeInteger(ts)||ts<connectedAt-2000||ts>now()+2000||now()-ts>60000)return;
    if(meta.mirrorOrigin!=='codex-app-server')return;
-   const ending=m.role==='assistant'&&['stop','endTurn','error','aborted'].includes(String(m.stopReason));
+   const ending=m.role==='assistant'&&meta.runTerminal===true;
    const executing=(m.role==='assistant'&&m.stopReason==='toolUse')||m.role==='toolResult';
    if(!ending&&(!executing||p.hasActiveRun!==true||p.status!=='running'))return;
    const id=identity(p.agentId,p.sessionKey,meta.runId),seq=meta.seq as number;
+   // A newly executing native turn supersedes older evidence for this same session.
+   // Other sessions (and their simultaneous work) remain untouched.
+   if(!ending)for(const [oldId,item] of evidence)if(item.agent===p.agentId&&item.key===p.sessionKey&&item.run!==meta.runId&&item.ts<=(meta.recordTimestampMs as number))evidence.delete(oldId);
    if(seq<=(messageSequences.get(id)??0))return;
    messageSequences.set(id,seq);if(messageSequences.size>2000)messageSequences.delete(messageSequences.keys().next().value!);
    onEvent({event:'sessions.changed',payload:{agentId:p.agentId,sessionKey:p.sessionKey,runId:meta.runId,ts:meta.recordTimestampMs,phase:ending?'end':'start'}});
