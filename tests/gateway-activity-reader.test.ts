@@ -36,3 +36,24 @@ test('native committed execution metadata proves work without reading content',a
  emit('assistant','stop',{__openclaw:{runId:'native-turn',recordTimestampMs:100000,seq:seq++,mirrorOrigin:'codex-app-server',runTerminal:true}});await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'unknown');
  emit('toolResult');await settle();assert.equal((await f.reader.snapshot()).activity.agents[0].status,'unknown');
  }finally{f.reader.close();}});
+
+test('RPC failure replaces terminally stopped client and fences delayed callbacks',async()=>{
+ const instances:{options:ReaderClientOptions;stopped:boolean}[]=[];let fail=false;
+ const reader=await createGatewayActivityReader(()=>({}),{fullCoverage:['main','dev','janet'],clientFactory:options=>{
+  const instance={options,stopped:false};instances.push(instance);
+  return {start(){if(!instance.stopped)options.onHelloOk({auth:{scopes:['operator.read']}});},stop(){instance.stopped=true;},async request(method){
+   if(fail){fail=false;throw Error('temporary failure');}
+   if(method==='sessions.subscribe')return {subscribed:true};
+   return {sessions:[],count:0,totalCount:0,hasMore:false};
+  }};
+ }});
+ try{
+  reader.start();await settle();assert.equal((await reader.snapshot()).activity.state,'connected');
+  fail=true;instances[0].options.onEvent({event:'sessions.changed',payload:{agentId:'main',sessionKey:'agent:main:test',runId:'r',ts:Date.now(),phase:'end'}});
+  await settle();assert.equal((await reader.snapshot()).activity.state,'disconnected');
+  await new Promise(resolve=>setTimeout(resolve,1100));assert.equal(instances.length,2);assert.equal(instances[0].stopped,true);
+  assert.equal((await reader.snapshot()).activity.state,'connected');
+  instances[0].options.onClose();instances[0].options.onConnectError();instances[0].options.onHelloOk({auth:{scopes:[]}});
+  assert.equal((await reader.snapshot()).activity.state,'connected');
+ }finally{reader.close();}
+});

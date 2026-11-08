@@ -18,10 +18,11 @@ export async function createGatewayActivityReader<T extends object>(taskSnapshot
  }
  const now=options.now??Date.now;const evidence=new Map<string,Evidence>();const terminal=new Map<string,number>();
  const messageSequences=new Map<string,number>();let connectedAt=0;
+ let clientGeneration=0;
  let revision=0,generation=0,authorized=false,closed=false,client:Client|undefined,restart:ReturnType<typeof setTimeout>|undefined;
  const identity=(a:ActivityAgent,key:string,run:string)=>JSON.stringify([a,key,run]);
  const disconnected=()=>{authorized=false;generation++;evidence.clear();terminal.clear();messageSequences.clear();provider.disconnected();};
- const reconnect=()=>{disconnected();client?.stop();if(!closed&&!restart){restart=setTimeout(()=>{restart=undefined;if(!closed)client?.start();},1000);restart.unref();}};
+ const reconnect=()=>{disconnected();clientGeneration++;client?.stop();if(!closed&&!restart){restart=setTimeout(()=>{restart=undefined;if(!closed){client=makeClient();client.start();}},1000);restart.unref();}};
  const provider=createLiveActivityProvider(taskSnapshot,{async request(method,params){
   if(!authorized||!client||closed)throw Error('Activity connection unavailable');
   const epoch=generation,requestRevision=revision;
@@ -78,11 +79,12 @@ export async function createGatewayActivityReader<T extends object>(taskSnapshot
   if(evidence.size>=2000&&!prior)return;
   evidence.set(id,{agent:p.agentId,key:p.sessionKey,run:p.runId,ts:p.ts,revision:++revision});provider.changed();
  };
- client=factory({url:'ws://127.0.0.1:18789',clientName:'gateway-client',clientDisplayName:'Engine Room activity reader',mode:'backend',role:'operator',scopes:['operator.read'],sharedStateMode:'read-only',hostDeps:{logError:()=>{},logDebug:()=>{}},
+ const makeClient=()=>{const instance=++clientGeneration;return factory!({url:'ws://127.0.0.1:18789',clientName:'gateway-client',clientDisplayName:'Engine Room activity reader',mode:'backend',role:'operator',scopes:['operator.read'],sharedStateMode:'read-only',hostDeps:{logError:()=>{},logDebug:()=>{}},
   onHelloOk:hello=>{
-   disconnected();if(closed)return;
+   if(instance!==clientGeneration||closed)return;disconnected();
    if(!object(hello)||!object(hello.auth)||!Array.isArray(hello.auth.scopes)||hello.auth.scopes.length!==1||hello.auth.scopes[0]!=='operator.read'){client?.stop();return;}
    authorized=true;connectedAt=now();void provider.connected();
-  },onClose:disconnected,onConnectError:disconnected,onEvent});
- return {start:()=>{if(!closed)client!.start();},snapshot:provider.snapshot,close:()=>{closed=true;if(restart)clearTimeout(restart);disconnected();provider.close();client?.stop();}};
+  },onClose:()=>{if(instance===clientGeneration)disconnected();},onConnectError:()=>{if(instance===clientGeneration)disconnected();},onEvent:event=>{if(instance===clientGeneration)onEvent(event);}});};
+ client=makeClient();
+ return {start:()=>{if(!closed)client!.start();},snapshot:provider.snapshot,close:()=>{closed=true;clientGeneration++;if(restart)clearTimeout(restart);disconnected();provider.close();client?.stop();}};
 }
